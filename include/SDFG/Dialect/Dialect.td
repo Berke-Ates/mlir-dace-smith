@@ -22,7 +22,6 @@ def SDFG_Dialect : Dialect{
     let description = [{A high-level dialect for representing SDFGs.}];
     let cppNamespace = "::mlir::sdfg";
     let useDefaultTypePrinterParser = 1;
-    let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 //===----------------------------------------------------------------------===//
