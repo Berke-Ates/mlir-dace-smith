@@ -9,6 +9,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/GeneratorOpBuilder.h"
 #include "llvm/ADT/MapVector.h"
 
 using namespace mlir;
@@ -340,6 +341,42 @@ LogicalResult SDFGNode::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !isa<ModuleOp>(parent))
+    return nullptr;
+
+  OperationState state(builder.getUnknownLoc(), getOperationName());
+  build(builder, state, utils::generateID(), nullptr, 0);
+  Operation *op = builder.create(state);
+  if (!op)
+    return nullptr;
+
+  SDFGNode sdfgNode = cast<SDFGNode>(op);
+  Block *body = builder.createBlock(&sdfgNode.getBody());
+
+  // Ensure entry state.
+  Operation *entryStateOp = StateNode::generate(builder);
+  if (!entryStateOp) {
+    sdfgNode.erase();
+    return nullptr;
+  }
+
+  StateNode entryState = cast<StateNode>(entryStateOp);
+  sdfgNode.setEntry(entryState.getName());
+
+  if (builder.generateBlock(body).failed()) {
+    sdfgNode.erase();
+    return nullptr;
+  }
+
+  return sdfgNode;
+}
+
 /// Returns the first state in the SDFG node.
 StateNode SDFGNode::getFirstState() {
   return *getBody().getOps<StateNode>().begin();
@@ -590,6 +627,32 @@ LogicalResult StateNode::verify() {
         !dyn_cast<func::FuncOp>(oper))
       return emitOpError("does not support other dialects");
   return success();
+}
+
+Operation *StateNode::generate(GeneratorOpBuilder &builder) {
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !isa<SDFGNode>(parent))
+    return nullptr;
+
+  OperationState state(builder.getUnknownLoc(), getOperationName());
+  build(builder, state, utils::generateID(), utils::generateName("state"));
+  Operation *op = builder.create(state);
+  if (!op)
+    return nullptr;
+
+  StateNode stateNode = cast<StateNode>(op);
+  builder.createBlock(&stateNode.getBody());
+
+  // if (builder.generateBlock(&sdfgNode.getBody().front()).failed()) {
+  //   sdfgNode.erase();
+  //   return nullptr;
+  // }
+
+  return stateNode;
 }
 
 //===----------------------------------------------------------------------===//

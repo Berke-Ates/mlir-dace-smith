@@ -11,7 +11,8 @@ def SDFG_StateNode : SDFG_Op<"state", [
     SingleBlock,
     NoTerminator,
     SymbolTable,
-    Symbol
+    Symbol,
+    DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "State region";
     let description = [{

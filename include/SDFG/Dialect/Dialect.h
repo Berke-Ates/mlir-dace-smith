@@ -9,6 +9,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/InitAllDialects.h"
 #include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/Interfaces/GeneratableInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"
 
 #include "SDFG/Dialect/OpsDialect.h.inc"

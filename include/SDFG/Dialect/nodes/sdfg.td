@@ -11,7 +11,8 @@ def SDFG_SDFGNode : SDFG_Op<"sdfg", [
     NoTerminator,
     IsolatedFromAbove,
     SymbolTable,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "SDFG region";
     let description = [{

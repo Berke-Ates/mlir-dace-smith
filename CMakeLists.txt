@@ -42,6 +42,7 @@ add_subdirectory(lib)
 add_subdirectory(test)
 add_subdirectory(sdfg-opt)
 add_subdirectory(sdfg-translate)
+add_subdirectory(sdfg-smith)
 
 # ##############################################################################
 # Formatting & Static Analysis

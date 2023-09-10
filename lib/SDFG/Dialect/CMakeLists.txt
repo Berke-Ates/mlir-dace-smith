@@ -11,6 +11,7 @@ add_mlir_dialect_library(
   LINK_LIBS
   PUBLIC
   MLIRIR
+  MLIRGeneratableInterfaces
   SDFG_UTILS)
 
 target_sources(SOURCE_FILES_CPP PRIVATE Dialect.cpp Ops.cpp)
