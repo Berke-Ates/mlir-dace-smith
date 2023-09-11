@@ -10,7 +10,8 @@ def SDFG_TaskletNode : SDFG_Op<"tasklet", [
     ParentOneOf<["StateNode","MapNode","ConsumeNode"]>,
     AffineScope, 
     AutomaticAllocationScope, 
-    IsolatedFromAbove
+    IsolatedFromAbove,
+    DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "Tasklet";
     let description = [{

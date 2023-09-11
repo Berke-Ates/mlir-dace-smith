@@ -11,7 +11,8 @@
 
 /// Defining the SDFG containers.
 def SDFG_AllocOp : SDFG_Op<"alloc", [
-    ParentOneOf<["SDFGNode", "NestedSDFGNode", "StateNode"]>
+    ParentOneOf<["SDFGNode", "NestedSDFGNode", "StateNode"]>,
+    DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "Array allocation operation";
     let description = [{
@@ -51,7 +52,8 @@ def SDFG_AllocOp : SDFG_Op<"alloc", [
 def SDFG_LoadOp : SDFG_Op<"load", [
     ParentOneOf<["StateNode", "MapNode", "ConsumeNode"]>,
     TypesMatchWith<"result type matches element type of 'memlet'", "arr", "res",
-                    "$_self.cast<ArrayType>().getDimensions().getElementType()">
+                    "$_self.cast<ArrayType>().getDimensions().getElementType()">,
+    DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "Memlet load operation";
     let description = [{
@@ -89,7 +91,8 @@ def SDFG_LoadOp : SDFG_Op<"load", [
 def SDFG_StoreOp : SDFG_Op<"store", [
     ParentOneOf<["StateNode", "MapNode", "ConsumeNode"]>,
     TypesMatchWith<"value type matches element type of 'memlet'", "arr", "val",
-                    "$_self.cast<ArrayType>().getDimensions().getElementType()">
+                    "$_self.cast<ArrayType>().getDimensions().getElementType()">,
+    DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "Memlet store operation";
     let description = [{
@@ -129,7 +132,8 @@ def SDFG_StoreOp : SDFG_Op<"store", [
 /// Combines load and store operations.
 def SDFG_CopyOp : SDFG_Op<"copy", [
     ParentOneOf<["StateNode", "MapNode", "ConsumeNode"]>,
-    SameTypeOperands
+    SameTypeOperands,
+    DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "Memlet copy operation";
     let description = [{

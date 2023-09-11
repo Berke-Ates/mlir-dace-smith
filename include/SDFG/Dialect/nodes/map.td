@@ -10,7 +10,8 @@ def SDFG_MapNode : SDFG_Op<"map", [
     ParentOneOf<["StateNode", "MapNode", "ConsumeNode"]>,
     SingleBlock,
     NoTerminator,
-    DeclareOpInterfaceMethods<LoopLikeOpInterface>
+    DeclareOpInterfaceMethods<LoopLikeOpInterface>,
+    DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "Map scope";
     let description = [{

@@ -735,6 +735,10 @@ LogicalResult TaskletNode::verify() {
   return success();
 }
 
+Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
+  return nullptr;
+}
+
 /// Returns the input name of the provided index.
 std::string TaskletNode::getInputName(unsigned idx) {
   return utils::valueToString(getBody().getArgument(idx), *getOperation());
@@ -845,6 +849,8 @@ LogicalResult MapNode::verify() {
 
 /// Returns the body of the map node.
 Region &MapNode::getLoopBody() { return getBody(); }
+
+Operation *MapNode::generate(GeneratorOpBuilder &builder) { return nullptr; }
 
 //===----------------------------------------------------------------------===//
 // ConsumeNode
@@ -1076,6 +1082,8 @@ LogicalResult EdgeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+Operation *EdgeOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
+
 //===----------------------------------------------------------------------===//
 // AllocOp
 //===----------------------------------------------------------------------===//
@@ -1158,6 +1166,8 @@ LogicalResult AllocOp::verify() {
 
   return success();
 }
+
+Operation *AllocOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
 
 /// Returns the type of the elements in the allocated data container.
 Type AllocOp::getElementType() {
@@ -1313,6 +1323,8 @@ LogicalResult LoadOp::verify() {
 
   return success();
 }
+
+Operation *LoadOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
 
 /// Returns true if the load operation has non-constant indices.
 bool LoadOp::isIndirect() { return !getIndices().empty(); }
@@ -1477,6 +1489,8 @@ LogicalResult StoreOp::verify() {
   return success();
 }
 
+Operation *StoreOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
+
 /// Returns true if the store operation has non-constant indices.
 bool StoreOp::isIndirect() { return !getIndices().empty(); }
 
@@ -1537,6 +1551,8 @@ void CopyOp::print(OpAsmPrinter &p) {
 
 /// Verifies the correct structure of a copy operation.
 LogicalResult CopyOp::verify() { return success(); }
+
+Operation *CopyOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
 
 //===----------------------------------------------------------------------===//
 // ViewCastOp

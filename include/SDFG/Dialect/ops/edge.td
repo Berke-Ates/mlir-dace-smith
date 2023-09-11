@@ -8,7 +8,8 @@
 /// Defining the SDFG edges.
 def SDFG_EdgeOp : SDFG_Op<"edge", [
     ParentOneOf<["SDFGNode", "NestedSDFGNode"]>,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "edge operation";
     let description = [{
