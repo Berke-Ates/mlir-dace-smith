@@ -647,10 +647,10 @@ Operation *StateNode::generate(GeneratorOpBuilder &builder) {
   StateNode stateNode = cast<StateNode>(op);
   builder.createBlock(&stateNode.getBody());
 
-  // if (builder.generateBlock(&sdfgNode.getBody().front()).failed()) {
-  //   sdfgNode.erase();
-  //   return nullptr;
-  // }
+  if (builder.generateBlock(&stateNode.getBody().front()).failed()) {
+    stateNode.erase();
+    return nullptr;
+  }
 
   return stateNode;
 }
@@ -736,6 +736,7 @@ LogicalResult TaskletNode::verify() {
 }
 
 Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
+  // TODO
   return nullptr;
 }
 
@@ -850,7 +851,10 @@ LogicalResult MapNode::verify() {
 /// Returns the body of the map node.
 Region &MapNode::getLoopBody() { return getBody(); }
 
-Operation *MapNode::generate(GeneratorOpBuilder &builder) { return nullptr; }
+Operation *MapNode::generate(GeneratorOpBuilder &builder) {
+  // TODO
+  return nullptr;
+}
 
 //===----------------------------------------------------------------------===//
 // ConsumeNode
@@ -1082,7 +1086,26 @@ LogicalResult EdgeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-Operation *EdgeOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
+Operation *EdgeOp::generate(GeneratorOpBuilder &builder) {
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !isa<SDFGNode>(parent))
+    return nullptr;
+
+  llvm::Optional<llvm::StringRef> srcSymbol = builder.sampleSymbol();
+  llvm::Optional<llvm::StringRef> dstSymbol = builder.sampleSymbol();
+
+  if (!srcSymbol.has_value() || !dstSymbol.has_value())
+    return nullptr;
+
+  OperationState state(builder.getUnknownLoc(), getOperationName());
+  build(builder, state, srcSymbol.value(), dstSymbol.value(),
+        builder.getArrayAttr({}), "1", nullptr);
+  return builder.create(state);
+}
 
 //===----------------------------------------------------------------------===//
 // AllocOp
@@ -1167,7 +1190,10 @@ LogicalResult AllocOp::verify() {
   return success();
 }
 
-Operation *AllocOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
+Operation *AllocOp::generate(GeneratorOpBuilder &builder) {
+  // TODO
+  return nullptr;
+}
 
 /// Returns the type of the elements in the allocated data container.
 Type AllocOp::getElementType() {
@@ -1324,7 +1350,10 @@ LogicalResult LoadOp::verify() {
   return success();
 }
 
-Operation *LoadOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
+Operation *LoadOp::generate(GeneratorOpBuilder &builder) {
+  // TODO
+  return nullptr;
+}
 
 /// Returns true if the load operation has non-constant indices.
 bool LoadOp::isIndirect() { return !getIndices().empty(); }
@@ -1489,7 +1518,10 @@ LogicalResult StoreOp::verify() {
   return success();
 }
 
-Operation *StoreOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
+Operation *StoreOp::generate(GeneratorOpBuilder &builder) {
+  // TODO
+  return nullptr;
+}
 
 /// Returns true if the store operation has non-constant indices.
 bool StoreOp::isIndirect() { return !getIndices().empty(); }
@@ -1552,7 +1584,10 @@ void CopyOp::print(OpAsmPrinter &p) {
 /// Verifies the correct structure of a copy operation.
 LogicalResult CopyOp::verify() { return success(); }
 
-Operation *CopyOp::generate(GeneratorOpBuilder &builder) { return nullptr; }
+Operation *CopyOp::generate(GeneratorOpBuilder &builder) {
+  // TODO
+  return nullptr;
+}
 
 //===----------------------------------------------------------------------===//
 // ViewCastOp
