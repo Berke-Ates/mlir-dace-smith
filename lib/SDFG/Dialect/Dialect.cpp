@@ -5,6 +5,7 @@
 
 #include "SDFG/Dialect/Dialect.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/GeneratorOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -126,6 +127,28 @@ void ArrayType::print(::mlir::AsmPrinter &odsPrinter) const {
   ArrayRef<bool> shape = getDimensions().getShape();
 
   printDimensionList(odsPrinter, elemType, symbols, integers, shape);
+}
+
+Type ArrayType::generate(GeneratorOpBuilder &builder) {
+  llvm::SmallVector<Type> possibleTypes = {
+      builder.getIndexType(), builder.getI1Type(),  builder.getI8Type(),
+      builder.getI16Type(),   builder.getI32Type(), builder.getI64Type(),
+      builder.getF16Type(),   builder.getF32Type(), builder.getF64Type(),
+  };
+
+  Type elemType = builder.sample(possibleTypes).value();
+  llvm::SmallVector<int64_t> integers;
+  llvm::SmallVector<bool> shape;
+
+  unsigned length = builder.sampleGeometric<unsigned>();
+  for (unsigned i = 0; i < length; ++i) {
+    integers.push_back(builder.sampleGeometric<int64_t>() + 1);
+    shape.push_back(true);
+  }
+
+  SizedType sizedType =
+      SizedType::get(builder.getContext(), elemType, {}, integers, shape);
+  return get(builder.getContext(), sizedType);
 }
 
 /// Returns the type of the elements in an array.

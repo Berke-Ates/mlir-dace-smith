@@ -67,7 +67,9 @@ def SDFG_SizedType : SDFG_Type<"Sized">{
 //===----------------------------------------------------------------------===//
 
 /// Defining the SDFG array type.
-def SDFG_ArrayType : SDFG_Type<"Array">{
+def SDFG_ArrayType : SDFG_Type<"Array",[
+    DeclareTypeInterfaceMethods<GeneratableTypeInterface>
+  ]>{
     let mnemonic = "array";
     let summary = "A array type";
     let description = [{

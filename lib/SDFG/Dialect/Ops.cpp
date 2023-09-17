@@ -635,7 +635,7 @@ Operation *StateNode::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   Operation *parent = block->getParentOp();
-  if (!parent || !isa<SDFGNode>(parent))
+  if (!parent || !(isa<SDFGNode>(parent) || isa<NestedSDFGNode>(parent)))
     return nullptr;
 
   OperationState state(builder.getUnknownLoc(), getOperationName());
@@ -1092,12 +1092,19 @@ Operation *EdgeOp::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   Operation *parent = block->getParentOp();
-  if (!parent || !isa<SDFGNode>(parent))
+  if (!parent || !(isa<SDFGNode>(parent) || isa<NestedSDFGNode>(parent)))
     return nullptr;
 
-  llvm::Optional<llvm::StringRef> srcSymbol = builder.sampleSymbol();
-  llvm::Optional<llvm::StringRef> dstSymbol = builder.sampleSymbol();
+  llvm::SmallVector<llvm::StringRef> usedSymbols;
+  for (EdgeOp edge : parent->getRegion(0).getOps<EdgeOp>())
+    usedSymbols.push_back(edge.getSrc());
 
+  llvm::Optional<llvm::StringRef> srcSymbol = builder.sampleSymbol(
+      [&](const Operation &op, const llvm::StringRef &sym) {
+        return !llvm::is_contained(usedSymbols, sym);
+      });
+
+  llvm::Optional<llvm::StringRef> dstSymbol = builder.sampleSymbol();
   if (!srcSymbol.has_value() || !dstSymbol.has_value())
     return nullptr;
 
@@ -1191,8 +1198,26 @@ LogicalResult AllocOp::verify() {
 }
 
 Operation *AllocOp::generate(GeneratorOpBuilder &builder) {
-  // TODO
   return nullptr;
+
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !(isa<SDFGNode>(parent) || isa<NestedSDFGNode>(parent) ||
+                   isa<StateNode>(parent)))
+    return nullptr;
+
+  Type arrayType = ArrayType::generate(builder);
+  if (!arrayType)
+    return nullptr;
+  ArrayType type = arrayType.cast<ArrayType>();
+
+  OperationState state(builder.getUnknownLoc(), getOperationName());
+  build(builder, state, type, {});
+
+  return builder.create(state);
 }
 
 /// Returns the type of the elements in the allocated data container.
