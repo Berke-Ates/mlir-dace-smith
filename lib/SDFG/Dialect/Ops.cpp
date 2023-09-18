@@ -736,8 +736,72 @@ LogicalResult TaskletNode::verify() {
 }
 
 Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
-  // TODO
-  return nullptr;
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !isa<StateNode>(parent))
+    return nullptr;
+
+  OperationState state(builder.getUnknownLoc(), getOperationName());
+  llvm::SmallVector<Type> argumentTypes = builder.sampleTypes();
+  llvm::Optional<llvm::SmallVector<Value>> arguments =
+      builder.sampleValuesOfTypes(argumentTypes);
+  if (!arguments.has_value()) {
+    return nullptr;
+  }
+
+  build(builder, state, {}, utils::generateID(), arguments.value());
+  Operation *op = builder.create(state);
+  if (!op)
+    return nullptr;
+
+  TaskletNode taskletNode = cast<TaskletNode>(op);
+  Block *body =
+      builder.createBlock(&taskletNode.getBody(), {}, argumentTypes,
+                          builder.getUnknownLocs(argumentTypes.size()));
+  builder.setInsertionPointToEnd(body);
+
+  // FIXME: This could be useful in the GeneratorOpBuilder
+  //-----
+  llvm::SmallVector<mlir::RegisteredOperationName> possibleOps;
+  for (RegisteredOperationName ron :
+       builder.getContext()->getRegisteredOperations())
+    if (ron.hasInterface<GeneratableOpInterface>() &&
+        (ron.getDialectNamespace() == "arith" ||
+         ron.getDialectNamespace() == "math"))
+      possibleOps.push_back(ron);
+
+  while (!possibleOps.empty()) {
+    llvm::Optional<RegisteredOperationName> sampledOp =
+        builder.sample(possibleOps);
+    if (sampledOp.has_value() && builder.generate(sampledOp.value()))
+      break;
+
+    if (sampledOp.has_value())
+      llvm::erase_value(possibleOps, sampledOp.value());
+  }
+  //-----
+
+  llvm::SmallVector<Type> resultTypes = builder.sampleTypes();
+  llvm::Optional<llvm::SmallVector<Value>> results =
+      builder.sampleValuesOfTypes(resultTypes);
+  if (!results.has_value()) {
+    taskletNode.erase();
+    return nullptr;
+  }
+
+  state = OperationState(builder.getUnknownLoc(), ReturnOp::getOperationName());
+  ReturnOp::build(builder, state, results.value());
+  if (!builder.create(state)) {
+    taskletNode.erase();
+    return nullptr;
+  }
+
+  op = builder.addResultTypes(taskletNode, resultTypes);
+  taskletNode.erase();
+  return op;
 }
 
 /// Returns the input name of the provided index.
@@ -747,7 +811,11 @@ std::string TaskletNode::getInputName(unsigned idx) {
 
 /// Returns the output name of the provided index.
 std::string TaskletNode::getOutputName(unsigned idx) {
-  return "__out" + std::to_string(idx);
+  Operation *terminator = getBody().getBlocks().back().getTerminator();
+  if (!terminator)
+    return "__out" + std::to_string(idx);
+
+  return sdfg::utils::valueToString(terminator->getOperand(idx));
 }
 
 //===----------------------------------------------------------------------===//

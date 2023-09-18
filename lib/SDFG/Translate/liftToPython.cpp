@@ -15,33 +15,14 @@ using namespace sdfg;
 Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
   // FIXME: Support multiple return values
   if (op.getNumResults() > 1)
-    return std::string("Not Supported");
+    return "Not Supported";
+
+  // Eliminates operations without return values, assuming they don't have side
+  // effects.
+  if (op.getNumResults() < 1)
+    return "";
 
   std::string nameOut = sdfg::utils::valueToString(op.getResult(0), op);
-
-  bool taskletToSingle = true;
-  if (TaskletNode task = dyn_cast<TaskletNode>(source)) {
-    // Figure out if we can transform the tasklet into a one-liner, i.e. no
-    // interdependent operations (one use = return op)
-    for (Operation &operation : task.getOps()) {
-      if (!operation.hasOneUse() && operation.getNumResults() > 0) {
-        taskletToSingle = false;
-        break;
-      }
-    }
-
-    // If we can, change the output name to the tasklet connector
-    if (taskletToSingle) {
-      unsigned i = 0;
-      for (Operation &operation : task.getOps()) {
-        if (operation.getLoc() == op.getLoc())
-          break;
-        ++i;
-      }
-
-      nameOut = task.getOutputName(i);
-    }
-  }
 
   //===--------------------------------------------------------------------===//
   // Arith
@@ -310,26 +291,7 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
   }
 
   if (isa<sdfg::ReturnOp>(op)) {
-    std::string code = "";
-
-    // Only add return code if we're not transforming tasklets to one-liners
-    if (!taskletToSingle) {
-      if (!isa<TaskletNode>(source)) {
-        // Tasklets are the only ones using sdfg.return
-        return std::nullopt;
-      }
-
-      TaskletNode task = cast<TaskletNode>(source);
-
-      for (unsigned i = 0; i < op.getNumOperands(); ++i) {
-        if (i > 0)
-          code.append("\\n");
-        code.append(task.getOutputName(i) + " = " +
-                    sdfg::utils::valueToString(op.getOperand(i), op));
-      }
-    }
-
-    return code;
+    return "";
   }
 
   //===--------------------------------------------------------------------===//
