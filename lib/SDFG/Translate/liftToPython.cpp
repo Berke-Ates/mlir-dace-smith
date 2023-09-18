@@ -17,12 +17,9 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
   if (op.getNumResults() > 1)
     return "Not Supported";
 
-  // Eliminates operations without return values, assuming they don't have side
-  // effects.
-  if (op.getNumResults() < 1)
-    return "";
-
-  std::string nameOut = sdfg::utils::valueToString(op.getResult(0), op);
+  std::string nameOut = "__out";
+  if (op.getNumResults() == 1)
+    nameOut = sdfg::utils::valueToString(op.getResult(0), op);
 
   //===--------------------------------------------------------------------===//
   // Arith
@@ -206,6 +203,82 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
     return nameOut + " = " + sdfg::utils::valueToString(op.getOperand(0), op);
   }
 
+  if (arith::OrIOp oriOp = dyn_cast<arith::OrIOp>(op)) {
+    std::string lhs = sdfg::utils::valueToString(oriOp.getOperand(0), op);
+    std::string rhs = sdfg::utils::valueToString(oriOp.getOperand(1), op);
+    return nameOut + " = " + lhs + " | " + rhs;
+  }
+
+  if (arith::AndIOp andiOp = dyn_cast<arith::AndIOp>(op)) {
+    std::string lhs = sdfg::utils::valueToString(andiOp.getOperand(0), op);
+    std::string rhs = sdfg::utils::valueToString(andiOp.getOperand(1), op);
+    return nameOut + " = " + lhs + " & " + rhs;
+  }
+
+  if (arith::BitcastOp bitcastOp = dyn_cast<arith::BitcastOp>(op)) {
+    return nameOut + " = " +
+           sdfg::utils::valueToString(bitcastOp.getOperand(), op);
+  }
+
+  if (arith::ShLIOp shliOp = dyn_cast<arith::ShLIOp>(op)) {
+    std::string lhs = sdfg::utils::valueToString(shliOp.getOperand(0), op);
+    std::string rhs = sdfg::utils::valueToString(shliOp.getOperand(1), op);
+    return nameOut + " = " + lhs + " << " + rhs;
+  }
+
+  if (arith::ShRSIOp shrsiOp = dyn_cast<arith::ShRSIOp>(op)) {
+    std::string lhs = sdfg::utils::valueToString(shrsiOp.getOperand(0), op);
+    std::string rhs = sdfg::utils::valueToString(shrsiOp.getOperand(1), op);
+    return nameOut + " = " + lhs + " >> " + rhs;
+  }
+
+  if (arith::ShRUIOp shruiOp = dyn_cast<arith::ShRUIOp>(op)) {
+    std::string lhs = sdfg::utils::valueToString(shruiOp.getOperand(0), op);
+    std::string rhs = sdfg::utils::valueToString(shruiOp.getOperand(1), op);
+    return nameOut + " = " + lhs + " >> " + rhs;
+  }
+
+  if (arith::CeilDivUIOp ceildivuiOp = dyn_cast<arith::CeilDivUIOp>(op)) {
+    std::string numerator =
+        sdfg::utils::valueToString(ceildivuiOp.getOperand(0), op);
+    std::string denominator =
+        sdfg::utils::valueToString(ceildivuiOp.getOperand(1), op);
+    return nameOut + " = -(-" + numerator + " // " + denominator + ")";
+  }
+
+  if (arith::XOrIOp xoriOp = dyn_cast<arith::XOrIOp>(op)) {
+    std::string lhs = sdfg::utils::valueToString(xoriOp.getOperand(0), op);
+    std::string rhs = sdfg::utils::valueToString(xoriOp.getOperand(1), op);
+    return nameOut + " = " + lhs + " ^ " + rhs;
+  }
+
+  if (arith::MinUIOp minuiOp = dyn_cast<arith::MinUIOp>(op)) {
+    std::string lhs = sdfg::utils::valueToString(minuiOp.getOperand(0), op);
+    std::string rhs = sdfg::utils::valueToString(minuiOp.getOperand(1), op);
+    return nameOut + " = min(" + lhs + ", " + rhs + ")";
+  }
+
+  if (arith::IndexCastUIOp index_castuiOp =
+          dyn_cast<arith::IndexCastUIOp>(op)) {
+    std::string operand =
+        sdfg::utils::valueToString(index_castuiOp.getOperand(), op);
+    return nameOut + " = int(" + operand + ")";
+  }
+
+  if (arith::MinFOp minfOp = dyn_cast<arith::MinFOp>(op)) {
+    std::string lhs = sdfg::utils::valueToString(minfOp.getOperand(0), op);
+    std::string rhs = sdfg::utils::valueToString(minfOp.getOperand(1), op);
+    return nameOut + " = min(" + lhs + ", " + rhs + ")";
+  }
+
+  if (arith::FloorDivSIOp floordivsiOp = dyn_cast<arith::FloorDivSIOp>(op)) {
+    std::string lhs =
+        sdfg::utils::valueToString(floordivsiOp.getOperand(0), op);
+    std::string rhs =
+        sdfg::utils::valueToString(floordivsiOp.getOperand(1), op);
+    return nameOut + " = " + lhs + " // " + rhs;
+  }
+
   //===--------------------------------------------------------------------===//
   // Math
   //===--------------------------------------------------------------------===//
@@ -240,6 +313,69 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
   if (math::LogOp logOp = dyn_cast<math::LogOp>(op)) {
     return nameOut + " = math.log(" +
            sdfg::utils::valueToString(logOp.getOperand(), op) + ")";
+  }
+
+  if (math::CountTrailingZerosOp cttzOp =
+          dyn_cast<math::CountTrailingZerosOp>(op)) {
+    std::string operand = sdfg::utils::valueToString(cttzOp.getOperand(), op);
+    return nameOut + " = (" + operand + " & -" + operand + ").bit_count()";
+  }
+
+  if (math::Log2Op log2Op = dyn_cast<math::Log2Op>(op)) {
+    std::string operand = sdfg::utils::valueToString(log2Op.getOperand(), op);
+    return nameOut + " = math.log2(" + operand + ")";
+  }
+
+  if (math::RsqrtOp rsqrtOp = dyn_cast<math::RsqrtOp>(op)) {
+    std::string operand = sdfg::utils::valueToString(rsqrtOp.getOperand(), op);
+    return nameOut + " = 1 / math.sqrt(" + operand + ")";
+  }
+
+  if (math::ErfOp erfOp = dyn_cast<math::ErfOp>(op)) {
+    std::string operand = sdfg::utils::valueToString(erfOp.getOperand(), op);
+    return nameOut + " = math.erf(" + operand + ")";
+  }
+
+  if (math::Exp2Op exp2Op = dyn_cast<math::Exp2Op>(op)) {
+    std::string operand = sdfg::utils::valueToString(exp2Op.getOperand(), op);
+    return nameOut + " = math.exp2(" + operand + ")";
+  }
+
+  if (math::IPowIOp ipowiOp = dyn_cast<math::IPowIOp>(op)) {
+    std::string base = sdfg::utils::valueToString(ipowiOp.getOperand(0), op);
+    std::string exponent =
+        sdfg::utils::valueToString(ipowiOp.getOperand(1), op);
+    return nameOut + " = " + base + " ** " + exponent;
+  }
+
+  if (math::TruncOp truncOp = dyn_cast<math::TruncOp>(op)) {
+    std::string operand = sdfg::utils::valueToString(truncOp.getOperand(), op);
+    return nameOut + " = math.trunc(" + operand + ")";
+  }
+
+  if (math::Log10Op log10Op = dyn_cast<math::Log10Op>(op)) {
+    std::string operand = sdfg::utils::valueToString(log10Op.getOperand(), op);
+    return nameOut + " = math.log10(" + operand + ")";
+  }
+
+  if (math::AbsIOp absiOp = dyn_cast<math::AbsIOp>(op)) {
+    std::string operand = sdfg::utils::valueToString(absiOp.getOperand(), op);
+    return nameOut + " = abs(" + operand + ")";
+  }
+
+  if (math::CbrtOp cbrtOp = dyn_cast<math::CbrtOp>(op)) {
+    std::string operand = sdfg::utils::valueToString(cbrtOp.getOperand(), op);
+    return nameOut + " = math.pow(" + operand + ", 1/3)";
+  }
+
+  if (math::TanOp tanOp = dyn_cast<math::TanOp>(op)) {
+    std::string operand = sdfg::utils::valueToString(tanOp.getOperand(), op);
+    return nameOut + " = math.tan(" + operand + ")";
+  }
+
+  if (math::CtPopOp ctpopOp = dyn_cast<math::CtPopOp>(op)) {
+    std::string operand = sdfg::utils::valueToString(ctpopOp.getOperand(), op);
+    return nameOut + " = bin(" + operand + ").count('1')";
   }
 
   //===--------------------------------------------------------------------===//

@@ -409,6 +409,7 @@ LogicalResult translation::collect(TaskletNode &op, ScopeNode &scope) {
       tasklet.setCode(code);
     } else {
       // TODO: Write content as code
+      return failure();
     }
   }
 
