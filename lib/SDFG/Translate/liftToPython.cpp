@@ -21,6 +21,13 @@ std::string getMinValueForSignedBitwidth(unsigned bitwidth) {
   return "-2**(" + std::to_string(bitwidth - 1) + ")";
 }
 
+unsigned getBitwidth(Type t) {
+  if (t.isIntOrFloat())
+    return t.getIntOrFloatBitWidth();
+  // e.g. index
+  return 64;
+}
+
 // TODO(later): Temporary auto-lifting. Will be included into DaCe
 /// Converts a single operation to a single line of Python code. If successful,
 /// returns Python code as s string.
@@ -325,7 +332,7 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
   }
 
   if (arith::AddUIExtendedOp addOp = dyn_cast<arith::AddUIExtendedOp>(op)) {
-    unsigned bitwidth = addOp.getType(0).getIntOrFloatBitWidth();
+    unsigned bitwidth = getBitwidth(addOp.getType(0));
     std::string nameOutSum = sdfg::utils::valueToString(op.getResult(0), op);
     std::string nameOutOverflow =
         sdfg::utils::valueToString(op.getResult(1), op);
@@ -335,12 +342,12 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
     std::string sumExpression = lhs + " + " + rhs;
     std::string overflowExpression =
         "(" + sumExpression + " > " + getMaxValueForBitwidth(bitwidth) + ")";
-    return nameOutSum + " = " + sumExpression + "\n" + nameOutOverflow + " = " +
-           overflowExpression;
+    return nameOutSum + " = " + sumExpression + "\\n" + nameOutOverflow +
+           " = " + overflowExpression;
   }
 
   if (arith::MulSIExtendedOp mulOp = dyn_cast<arith::MulSIExtendedOp>(op)) {
-    unsigned bitwidth = mulOp.getType(0).getIntOrFloatBitWidth();
+    unsigned bitwidth = getBitwidth(mulOp.getType(0));
     std::string nameOutLow = sdfg::utils::valueToString(op.getResult(0), op);
     std::string nameOutHigh = sdfg::utils::valueToString(op.getResult(1), op);
     std::string lhs = sdfg::utils::valueToString(mulOp.getOperand(0), op);
@@ -353,7 +360,7 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
            ", " + divValue + ")";
   }
   if (arith::MulUIExtendedOp mulOp = dyn_cast<arith::MulUIExtendedOp>(op)) {
-    unsigned bitwidth = mulOp.getType(0).getIntOrFloatBitWidth();
+    unsigned bitwidth = getBitwidth(mulOp.getType(0));
 
     std::string nameOutLow = sdfg::utils::valueToString(op.getResult(0), op);
     std::string nameOutHigh = sdfg::utils::valueToString(op.getResult(1), op);
