@@ -104,14 +104,14 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
   }
 
   if (isa<arith::CmpIOp>(op) || isa<arith::CmpFOp>(op)) {
-    Value lhsValue;
-    Value rhsValue;
+    std::string lhs;
+    std::string rhs;
     std::string predicate = "";
 
     if (isa<arith::CmpIOp>(op)) {
       arith::CmpIOp cmp = dyn_cast<arith::CmpIOp>(op);
-      lhsValue = cmp.getLhs();
-      rhsValue = cmp.getRhs();
+      lhs = sdfg::utils::valueToString(cmp.getLhs(), op);
+      rhs = sdfg::utils::valueToString(cmp.getRhs(), op);
 
       switch (cmp.getPredicate()) {
       case arith::CmpIPredicate::eq:
@@ -149,8 +149,8 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
 
     else {
       arith::CmpFOp cmp = dyn_cast<arith::CmpFOp>(op);
-      lhsValue = cmp.getLhs();
-      rhsValue = cmp.getRhs();
+      lhs = sdfg::utils::valueToString(cmp.getLhs(), op);
+      rhs = sdfg::utils::valueToString(cmp.getRhs(), op);
 
       switch (cmp.getPredicate()) {
       case arith::CmpFPredicate::OEQ:
@@ -183,14 +183,24 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
         predicate = "<";
         break;
 
+      case arith::CmpFPredicate::ORD:
+        lhs = "not math.isnan(" + lhs + ")";
+        predicate = "and";
+        rhs = "not math.isnan(" + rhs + ")";
+        break;
+
+      case arith::CmpFPredicate::UNO:
+        lhs = "math.isnan(" + lhs + ")";
+        predicate = "or";
+        rhs = "math.isnan(" + rhs + ")";
+        break;
+
       default:
         break;
       }
     }
 
     std::string nameOut = sdfg::utils::valueToString(op.getResult(0), op);
-    std::string lhs = sdfg::utils::valueToString(lhsValue, op);
-    std::string rhs = sdfg::utils::valueToString(rhsValue, op);
     return nameOut + " = " + lhs + " " + predicate + " " + rhs;
   }
 
