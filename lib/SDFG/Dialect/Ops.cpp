@@ -745,7 +745,11 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   OperationState state(builder.getUnknownLoc(), getOperationName());
-  llvm::SmallVector<Type> argumentTypes = builder.sampleTypes();
+  llvm::SmallVector<Type> argumentTypes =
+      builder.sampleTypes(0, [](const Type &t) {
+        // FIXME: Translator fails to handle these.
+        return !t.isa<ArrayType>();
+      });
   llvm::Optional<llvm::SmallVector<Value>> arguments =
       builder.sampleValuesOfTypes(argumentTypes);
   if (!arguments.has_value()) {
@@ -1266,8 +1270,6 @@ LogicalResult AllocOp::verify() {
 }
 
 Operation *AllocOp::generate(GeneratorOpBuilder &builder) {
-  return nullptr;
-
   Block *block = builder.getBlock();
   if (!block)
     return nullptr;
@@ -1280,11 +1282,9 @@ Operation *AllocOp::generate(GeneratorOpBuilder &builder) {
   Type arrayType = ArrayType::generate(builder);
   if (!arrayType)
     return nullptr;
-  ArrayType type = arrayType.cast<ArrayType>();
 
   OperationState state(builder.getUnknownLoc(), getOperationName());
-  build(builder, state, type, {});
-
+  build(builder, state, arrayType, {});
   return builder.create(state);
 }
 
@@ -1444,7 +1444,67 @@ LogicalResult LoadOp::verify() {
 }
 
 Operation *LoadOp::generate(GeneratorOpBuilder &builder) {
-  // TODO
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !isa<StateNode>(parent))
+    return nullptr;
+
+  llvm::SmallVector<Value> possibleArrays = builder.collectValues(
+      [](const Value &v) { return v.getType().isa<ArrayType>(); });
+
+  while (!possibleArrays.empty()) {
+    Value arrayValue = builder.sample(possibleArrays).value();
+    ArrayType arrayType = arrayValue.getType().cast<ArrayType>();
+
+    // TODO: Handle dynamic sizes
+    if (arrayType.getDimensions().getUndefRank() > 0) {
+      llvm::erase_value(possibleArrays, arrayValue);
+      continue;
+    }
+
+    // TODO: Handle symbolic sizes
+    if (arrayType.getSymbols().size() > 0) {
+      llvm::erase_value(possibleArrays, arrayValue);
+      continue;
+    }
+
+    // TODO: Handle block arguments
+    if (!arrayValue.getDefiningOp()) {
+      llvm::erase_value(possibleArrays, arrayValue);
+      continue;
+    }
+
+    // TODO: Ensure array is initialized.
+    // Operation *defOp = arrayValue.getDefiningOp();
+
+    // Sample indices.
+    SmallVector<Attribute> attrList;
+    SmallVector<Attribute> numList;
+
+    for (size_t i = 0; i < arrayType.getShape().size(); ++i) {
+      numList.push_back(builder.getI32IntegerAttr(-i - 1));
+
+      int32_t maxVal =
+          arrayType.getIntegers()[i] > 0 ? arrayType.getIntegers()[i] - 1 : 0;
+      unsigned idx = builder.sampleUniform(0, maxVal);
+      attrList.push_back(builder.getI32IntegerAttr(idx));
+    }
+
+    // Create LoadOp.
+    OperationState state(builder.getUnknownLoc(), LoadOp::getOperationName());
+    state.addAttribute("indices", builder.getArrayAttr(attrList));
+    state.addAttribute("indices_numList", builder.getArrayAttr(numList));
+    LoadOp::build(builder, state, arrayType.getElementType(), {}, arrayValue);
+    Operation *op = builder.create(state);
+    if (op)
+      return op;
+
+    llvm::erase_value(possibleArrays, arrayValue);
+  }
+
   return nullptr;
 }
 
@@ -1612,7 +1672,72 @@ LogicalResult StoreOp::verify() {
 }
 
 Operation *StoreOp::generate(GeneratorOpBuilder &builder) {
-  // TODO
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !isa<StateNode>(parent))
+    return nullptr;
+
+  llvm::SmallVector<Value> possibleArrays = builder.collectValues(
+      [](const Value &v) { return v.getType().isa<ArrayType>(); });
+
+  while (!possibleArrays.empty()) {
+    Value arrayValue = builder.sample(possibleArrays).value();
+    ArrayType arrayType = arrayValue.getType().cast<ArrayType>();
+
+    // TODO: Handle dynamic sizes
+    if (arrayType.getDimensions().getUndefRank() > 0) {
+      llvm::erase_value(possibleArrays, arrayValue);
+      continue;
+    }
+
+    // TODO: Handle symbolic sizes
+    if (arrayType.getSymbols().size() > 0) {
+      llvm::erase_value(possibleArrays, arrayValue);
+      continue;
+    }
+
+    // TODO: Handle block arguments
+    if (!arrayValue.getDefiningOp()) {
+      llvm::erase_value(possibleArrays, arrayValue);
+      continue;
+    }
+
+    // Sample value.
+    llvm::Optional<Value> value =
+        builder.sampleValueOfType(arrayType.getElementType());
+    if (!value.has_value()) {
+      llvm::erase_value(possibleArrays, arrayValue);
+      continue;
+    }
+
+    // Sample indices.
+    SmallVector<Attribute> attrList;
+    SmallVector<Attribute> numList;
+
+    for (size_t i = 0; i < arrayType.getShape().size(); ++i) {
+      numList.push_back(builder.getI32IntegerAttr(-i - 1));
+
+      int32_t maxVal =
+          arrayType.getIntegers()[i] > 0 ? arrayType.getIntegers()[i] - 1 : 0;
+      unsigned idx = builder.sampleUniform(0, maxVal);
+      attrList.push_back(builder.getI32IntegerAttr(idx));
+    }
+
+    // Create StoreOp.
+    OperationState state(builder.getUnknownLoc(), StoreOp::getOperationName());
+    state.addAttribute("indices", builder.getArrayAttr(attrList));
+    state.addAttribute("indices_numList", builder.getArrayAttr(numList));
+    StoreOp::build(builder, state, {}, value.value(), arrayValue);
+    Operation *op = builder.create(state);
+    if (op)
+      return op;
+
+    llvm::erase_value(possibleArrays, arrayValue);
+  }
+
   return nullptr;
 }
 
@@ -1678,7 +1803,52 @@ void CopyOp::print(OpAsmPrinter &p) {
 LogicalResult CopyOp::verify() { return success(); }
 
 Operation *CopyOp::generate(GeneratorOpBuilder &builder) {
-  // TODO
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !isa<StateNode>(parent))
+    return nullptr;
+
+  llvm::SmallVector<Value> possibleArrays = builder.collectValues(
+      [](const Value &v) { return v.getType().isa<ArrayType>(); });
+
+  while (!possibleArrays.empty()) {
+    Value srcArr = builder.sample(possibleArrays).value();
+    ArrayType arrayType = srcArr.getType().cast<ArrayType>();
+
+    // TODO: Handle dynamic sizes
+    if (arrayType.getDimensions().getUndefRank() > 0) {
+      llvm::erase_value(possibleArrays, srcArr);
+      continue;
+    }
+
+    // TODO: Handle symbolic sizes
+    if (arrayType.getSymbols().size() > 0) {
+      llvm::erase_value(possibleArrays, srcArr);
+      continue;
+    }
+
+    // TODO: Handle block arguments
+    if (!srcArr.getDefiningOp()) {
+      llvm::erase_value(possibleArrays, srcArr);
+      continue;
+    }
+
+    // Sample destArray
+    llvm::Optional<Value> destArr = builder.sampleValueOfType(arrayType);
+
+    // Create CopyOp.
+    OperationState state(builder.getUnknownLoc(), CopyOp::getOperationName());
+    CopyOp::build(builder, state, srcArr, destArr.value());
+    Operation *op = builder.create(state);
+    if (op)
+      return op;
+
+    llvm::erase_value(possibleArrays, srcArr);
+  }
+
   return nullptr;
 }
 
