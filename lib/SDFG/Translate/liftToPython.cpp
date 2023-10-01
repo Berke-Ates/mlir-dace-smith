@@ -141,9 +141,6 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
       case arith::CmpIPredicate::ult:
         predicate = "<";
         break;
-
-      default:
-        break;
       }
     }
 
@@ -195,7 +192,16 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
         rhs = "math.isnan(" + rhs + ")";
         break;
 
-      default:
+      case arith::CmpFPredicate::AlwaysFalse:
+        lhs = "False";
+        predicate = "";
+        rhs = "";
+        break;
+
+      case arith::CmpFPredicate::AlwaysTrue:
+        lhs = "True";
+        predicate = "";
+        rhs = "";
         break;
       }
     }
