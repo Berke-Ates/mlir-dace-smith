@@ -924,8 +924,75 @@ LogicalResult MapNode::verify() {
 Region &MapNode::getLoopBody() { return getBody(); }
 
 Operation *MapNode::generate(GeneratorOpBuilder &builder) {
-  // TODO
-  return nullptr;
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !isa<StateNode>(parent))
+    return nullptr;
+
+  // Determine number of parameters.
+  unsigned num_params = builder.sampleGeometric<unsigned>() + 1;
+
+  // List of values and argument types.
+  llvm::SmallVector<Value> operands;
+  llvm::SmallVector<Type> argumentTypes;
+  for (unsigned i = 0; i < num_params; ++i)
+    argumentTypes.push_back(builder.getIndexType());
+
+  // Sample lower bounds.
+  SmallVector<Attribute> lb_numList;
+  for (unsigned i = 0; i < num_params; ++i) {
+    lb_numList.push_back(builder.getI32IntegerAttr(operands.size()));
+    llvm::Optional<Value> val =
+        builder.sampleValueOfType(builder.getIndexType());
+    if (!val.has_value())
+      return nullptr;
+    operands.push_back(val.value());
+  }
+
+  // Sample upper bounds.
+  SmallVector<Attribute> ub_numList;
+  for (unsigned i = 0; i < num_params; ++i) {
+    ub_numList.push_back(builder.getI32IntegerAttr(operands.size()));
+    llvm::Optional<Value> val =
+        builder.sampleValueOfType(builder.getIndexType());
+    if (!val.has_value())
+      return nullptr;
+    operands.push_back(val.value());
+  }
+
+  // Sample step size.
+  SmallVector<Attribute> st_attrList;
+  SmallVector<Attribute> st_numList;
+  for (unsigned i = 0; i < num_params; ++i) {
+    st_numList.push_back(builder.getI32IntegerAttr(-i - 1));
+    st_attrList.push_back(builder.getIndexAttr(1));
+  }
+
+  OperationState state(builder.getUnknownLoc(), MapNode::getOperationName());
+  state.addAttribute("lowerBounds_numList", builder.getArrayAttr(lb_numList));
+  state.addAttribute("upperBounds_numList", builder.getArrayAttr(ub_numList));
+  state.addAttribute("steps_numList", builder.getArrayAttr(st_numList));
+
+  ArrayAttr empty = builder.getArrayAttr(SmallVector<Attribute>());
+  MapNode::build(builder, state, utils::generateID(), utils::generateID(),
+                 operands, empty, empty, builder.getArrayAttr(st_attrList));
+  Operation *op = builder.create(state);
+  if (!op)
+    return nullptr;
+
+  MapNode mapNode = cast<MapNode>(op);
+  Block *body =
+      builder.createBlock(&mapNode.getBody(), {}, argumentTypes,
+                          builder.getUnknownLocs(argumentTypes.size()));
+  if (builder.generateBlock(body).failed()) {
+    mapNode.erase();
+    return nullptr;
+  }
+
+  return op;
 }
 
 //===----------------------------------------------------------------------===//
