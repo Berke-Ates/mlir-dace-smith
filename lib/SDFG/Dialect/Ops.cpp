@@ -374,6 +374,25 @@ Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
     return nullptr;
   }
 
+  // Add arguments.
+  builder.setInsertionPointToEnd(body);
+  llvm::SmallVector<Value> values = builder.collectValues(
+      [](const Value &v) { return v.getType().isa<ArrayType>(); });
+
+  unsigned numArgs = builder.sampleGeometric<unsigned>();
+  numArgs = numArgs > values.size() ? values.size() : numArgs;
+  llvm::Optional<llvm::SmallVector<Value>> argVals =
+      builder.sample(values, numArgs, /*allowDuplucates=*/false);
+
+  if (!argVals.has_value())
+    return sdfgNode;
+
+  for (Value v : argVals.value()) {
+    BlockArgument bArg =
+        body->addArgument(v.getType(), builder.getUnknownLoc());
+    v.replaceAllUsesWith(bArg);
+  }
+
   return sdfgNode;
 }
 
@@ -1352,6 +1371,7 @@ Operation *AllocOp::generate(GeneratorOpBuilder &builder) {
 
   OperationState state(builder.getUnknownLoc(), getOperationName());
   build(builder, state, arrayType, {});
+  state.addAttribute("init", builder.getUnitAttr());
   return builder.create(state);
 }
 
@@ -1543,9 +1563,6 @@ Operation *LoadOp::generate(GeneratorOpBuilder &builder) {
       llvm::erase_value(possibleArrays, arrayValue);
       continue;
     }
-
-    // TODO: Ensure array is initialized.
-    // Operation *defOp = arrayValue.getDefiningOp();
 
     // Sample indices.
     SmallVector<Attribute> attrList;
