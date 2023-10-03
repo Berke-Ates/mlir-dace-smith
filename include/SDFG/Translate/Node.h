@@ -143,14 +143,16 @@ public:
   std::string name;
   bool transient;
   bool stream;
+  bool init;
   SizedType shape;
 
-  Array(StringRef name, bool transient, bool stream, Type t)
-      : name(name), transient(transient), stream(stream),
+  Array(StringRef name, bool transient, bool stream, bool init, Type t)
+      : name(name), transient(transient), stream(stream), init(init),
         shape(SizedType::get(t.getContext(), t, {}, {}, {})) {}
 
-  Array(StringRef name, bool transient, bool stream, SizedType shape)
-      : name(name), transient(transient), stream(stream), shape(shape) {}
+  Array(StringRef name, bool transient, bool stream, bool init, SizedType shape)
+      : name(name), transient(transient), stream(stream), init(init),
+        shape(shape) {}
 
   /// Emits this array to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
@@ -763,9 +765,9 @@ private:
   std::shared_ptr<AccessImpl> ptr;
 
 public:
-  Access(Location location)
+  Access(Location location, bool init)
       : ConnectorNode(std::static_pointer_cast<ConnectorNodeImpl>(
-            std::make_shared<AccessImpl>(location))),
+            std::make_shared<AccessImpl>(location, init))),
         ptr(std::static_pointer_cast<AccessImpl>(ConnectorNode::ptr)) {
     type = NType::Access;
   }
@@ -777,8 +779,11 @@ public:
 /// Implementation of the access node class.
 class AccessImpl : public ConnectorNodeImpl {
 private:
+  bool init;
+
 public:
-  AccessImpl(Location location) : ConnectorNodeImpl(location) {}
+  AccessImpl(Location location, bool init)
+      : ConnectorNodeImpl(location), init(init) {}
 
   /// Emits the access node to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;

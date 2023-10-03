@@ -776,14 +776,16 @@ void State::emit(emitter::JsonEmitter &jemit) { ptr->emit(jemit); }
 /// found.
 Connector StateImpl::lookup(Value value) {
   if (lut.find(utils::valueToString(value)) == lut.end()) {
-    Access access(location);
     std::string name = utils::valueToString(value);
+    bool init = false;
 
     if (value.getDefiningOp() != nullptr) {
       AllocOp allocOp = cast<AllocOp>(value.getDefiningOp());
       name = allocOp.getName().value_or(name);
+      init = allocOp->hasAttr("init");
     }
 
+    Access access(location, init);
     access.setName(name);
     addNode(access);
 
@@ -925,6 +927,9 @@ void AccessImpl::emit(emitter::JsonEmitter &jemit) {
   jemit.startNamedObject("attributes");
   printLocation(location, jemit);
   jemit.printKVPair("data", name);
+
+  jemit.printKVPair("setzero", init ? "true" : "false",
+                    /*stringify=*/false);
   ConnectorNodeImpl::emit(jemit);
   jemit.endObject(); // attributes */
 

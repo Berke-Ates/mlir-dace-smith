@@ -27,16 +27,17 @@ insertTransientArray(Location location, translation::Connector connector,
   using namespace translation;
 
   Array array(sdfg::utils::generateName("tmp"), /*transient=*/true,
-              /*stream=*/false, value.getType());
+              /*stream=*/false, /*init=*/false, value.getType());
 
   if (sdfg::utils::isSizedType(value.getType()))
     array = Array(sdfg::utils::generateName("tmp"), /*transient=*/true,
-                  /*stream=*/false, sdfg::utils::getSizedType(value.getType()));
+                  /*stream=*/false, /*init=*/false,
+                  sdfg::utils::getSizedType(value.getType()));
 
   SDFG sdfg = scope.getSDFG();
   sdfg.addArray(array);
 
-  Access access(location);
+  Access access(location, false);
   access.setName(array.name);
   scope.addNode(access);
 
@@ -165,11 +166,11 @@ LogicalResult collectSDFG(Operation &op, translation::SDFG &sdfg) {
         sdfg.addSymbol(Symbol(sym.getValue(), DType::int64));
 
       Array array(sdfg::utils::valueToString(ba), /*transient=*/false,
-                  /*stream=*/false, sizedType);
+                  /*stream=*/false, /*init=*/false, sizedType);
       sdfg.addArg(array);
     } else {
       Array array(sdfg::utils::valueToString(ba), /*transient=*/false,
-                  /*stream=*/false, ba.getType());
+                  /*stream=*/false, /*init=*/false, ba.getType());
       sdfg.addArg(array);
     }
   }
@@ -305,7 +306,7 @@ LogicalResult translation::collect(EdgeOp &op, SDFG &sdfg) {
 /// Collects array/stream allocation information in a top-level SDFG.
 LogicalResult translation::collect(AllocOp &op, SDFG &sdfg) {
   Array array(op.getContainerName(), op.getTransient(), op.isStream(),
-              sdfg::utils::getSizedType(op.getType()));
+              op->hasAttr("init"), sdfg::utils::getSizedType(op.getType()));
   sdfg.addArray(array);
 
   return success();
@@ -314,7 +315,7 @@ LogicalResult translation::collect(AllocOp &op, SDFG &sdfg) {
 /// Collects array/stream allocation information in a scope.
 LogicalResult translation::collect(AllocOp &op, ScopeNode &scope) {
   Array array(op.getContainerName(), op.getTransient(), op.isStream(),
-              sdfg::utils::getSizedType(op.getType()));
+              op->hasAttr("init"), sdfg::utils::getSizedType(op.getType()));
   scope.getSDFG().addArray(array);
 
   return success();
@@ -667,15 +668,16 @@ LogicalResult translation::collect(ConsumeNode &op, ScopeNode &scope) {
 
 /// Collects copy operation information in a scope.
 LogicalResult translation::collect(CopyOp &op, ScopeNode &scope) {
-  Access access(op.getLoc());
-
   std::string name = sdfg::utils::valueToString(op.getDest());
+  bool init = false;
 
   if (op.getDest().getDefiningOp() != nullptr) {
     AllocOp allocOp = cast<AllocOp>(op.getDest().getDefiningOp());
     name = allocOp.getName().value_or(name);
+    init = allocOp->hasAttr("init");
   }
 
+  Access access(op.getLoc(), init);
   access.setName(name);
   scope.addNode(access);
 
@@ -696,13 +698,15 @@ LogicalResult translation::collect(CopyOp &op, ScopeNode &scope) {
 /// Collects store operation information in a scope.
 LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
   std::string name = sdfg::utils::valueToString(op.getArr());
+  bool init = false;
 
   if (op.getArr().getDefiningOp() != nullptr) {
     AllocOp allocOp = cast<AllocOp>(op.getArr().getDefiningOp());
     name = allocOp.getName().value_or(name);
+    init = allocOp->hasAttr("init");
   }
 
-  Access access(op.getLoc());
+  Access access(op.getLoc(), init);
   access.setName(name);
   scope.addNode(access);
 
@@ -999,7 +1003,7 @@ LogicalResult translation::collect(SymOp &op, ScopeNode &scope) {
 
 /// Collects stream push operation information in a scope.
 LogicalResult translation::collect(StreamPushOp &op, ScopeNode &scope) {
-  Access access(op.getLoc());
+  Access access(op.getLoc(), false);
   std::string name = sdfg::utils::valueToString(op.getStr());
 
   if (op.getStr().getDefiningOp() != nullptr) {
