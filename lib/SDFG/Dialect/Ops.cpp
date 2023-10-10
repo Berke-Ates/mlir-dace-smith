@@ -548,6 +548,56 @@ NestedSDFGNode::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+Operation *NestedSDFGNode::generate(GeneratorOpBuilder &builder) {
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+
+  Operation *parent = block->getParentOp();
+  if (!parent || !(isa<StateNode>(parent) || isa<MapNode>(parent) ||
+                   isa<ConsumeNode>(parent)))
+    return nullptr;
+
+  // Sample Arguments.
+  llvm::SmallVector<Type> argumentTypes =
+      builder.sampleTypes(0, [](const Type &t) { return t.isa<ArrayType>(); });
+  llvm::Optional<llvm::SmallVector<Value>> arguments =
+      builder.sampleValuesOfTypes(argumentTypes);
+  if (!arguments.has_value())
+    return nullptr;
+
+  // Create NestedSDFGNode.
+  OperationState state(builder.getUnknownLoc(),
+                       NestedSDFGNode::getOperationName());
+  NestedSDFGNode::build(builder, state, utils::generateID(), nullptr, 0,
+                        arguments.value());
+  Operation *op = builder.create(state);
+  if (!op)
+    return nullptr;
+
+  NestedSDFGNode nestedSDFGNode = cast<NestedSDFGNode>(op);
+  Block *body =
+      builder.createBlock(&nestedSDFGNode.getBody(), {}, argumentTypes,
+                          builder.getUnknownLocs(argumentTypes.size()));
+
+  // Ensure entry state.
+  Operation *entryStateOp = StateNode::generate(builder);
+  if (!entryStateOp) {
+    nestedSDFGNode.erase();
+    return nullptr;
+  }
+
+  StateNode entryState = cast<StateNode>(entryStateOp);
+  nestedSDFGNode.setEntry(entryState.getName());
+
+  if (builder.generateBlock(body).failed()) {
+    nestedSDFGNode.erase();
+    return nullptr;
+  }
+
+  return nestedSDFGNode;
+}
+
 /// Returns the first state in the nested SDFG node.
 StateNode NestedSDFGNode::getFirstState() {
   return *getBody().getOps<StateNode>().begin();
@@ -760,7 +810,8 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   Operation *parent = block->getParentOp();
-  if (!parent || !isa<StateNode>(parent))
+  if (!parent || !(isa<StateNode>(parent) || isa<MapNode>(parent) ||
+                   isa<ConsumeNode>(parent)))
     return nullptr;
 
   OperationState state(builder.getUnknownLoc(), getOperationName());
@@ -771,9 +822,8 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
       });
   llvm::Optional<llvm::SmallVector<Value>> arguments =
       builder.sampleValuesOfTypes(argumentTypes);
-  if (!arguments.has_value()) {
+  if (!arguments.has_value())
     return nullptr;
-  }
 
   build(builder, state, {}, utils::generateID(), arguments.value());
   Operation *op = builder.create(state);
@@ -948,7 +998,8 @@ Operation *MapNode::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   Operation *parent = block->getParentOp();
-  if (!parent || !isa<StateNode>(parent))
+  if (!parent || !(isa<StateNode>(parent) || isa<MapNode>(parent) ||
+                   isa<ConsumeNode>(parent)))
     return nullptr;
 
   // Determine number of parameters.
@@ -1006,7 +1057,7 @@ Operation *MapNode::generate(GeneratorOpBuilder &builder) {
   Block *body =
       builder.createBlock(&mapNode.getBody(), {}, argumentTypes,
                           builder.getUnknownLocs(argumentTypes.size()));
-  if (builder.generateBlock(body).failed()) {
+  if (builder.generateBlock(body).failed() || body->empty()) {
     mapNode.erase();
     return nullptr;
   }
@@ -1536,7 +1587,8 @@ Operation *LoadOp::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   Operation *parent = block->getParentOp();
-  if (!parent || !isa<StateNode>(parent))
+  if (!parent || !(isa<StateNode>(parent) || isa<MapNode>(parent) ||
+                   isa<ConsumeNode>(parent)))
     return nullptr;
 
   llvm::SmallVector<Value> possibleArrays = builder.collectValues(
@@ -1761,7 +1813,8 @@ Operation *StoreOp::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   Operation *parent = block->getParentOp();
-  if (!parent || !isa<StateNode>(parent))
+  if (!parent || !(isa<StateNode>(parent) || isa<MapNode>(parent) ||
+                   isa<ConsumeNode>(parent)))
     return nullptr;
 
   llvm::SmallVector<Value> possibleArrays = builder.collectValues(
@@ -1892,7 +1945,8 @@ Operation *CopyOp::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   Operation *parent = block->getParentOp();
-  if (!parent || !isa<StateNode>(parent))
+  if (!parent || !(isa<StateNode>(parent) || isa<MapNode>(parent) ||
+                   isa<ConsumeNode>(parent)))
     return nullptr;
 
   llvm::SmallVector<Value> possibleArrays = builder.collectValues(

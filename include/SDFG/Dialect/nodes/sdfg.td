@@ -54,7 +54,8 @@ def SDFG_NestedSDFGNode : SDFG_Op<"nested_sdfg", [
     NoTerminator,
     IsolatedFromAbove,
     SymbolTable,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        DeclareOpInterfaceMethods<GeneratableOpInterface>
 ]> {
     let summary = "Nested SDFG region";
     let description = [{
