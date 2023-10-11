@@ -586,12 +586,8 @@ LogicalResult translation::collect(MapNode &op, ScopeNode &scope) {
   // FIXME: It would be cleaner if users would directly incorporate it as a
   // symbol.
   for (BlockArgument bArg : op.getBody().getArguments()) {
-    bool usedByNonMemlet = false;
-    for (Operation *user : bArg.getUsers())
-      usedByNonMemlet |= !(isa<StoreOp>(user) || isa<LoadOp>(user));
-    if (!usedByNonMemlet)
+    if (bArg.getUses().empty())
       continue;
-
     std::string name = sdfg::utils::valueToString(bArg);
     Tasklet task(op.getLoc());
     task.setName("SYM" + name);
@@ -707,9 +703,7 @@ LogicalResult translation::collect(CopyOp &op, ScopeNode &scope) {
   Connector accOut(access);
   access.addOutConnector(accOut);
 
-  MultiEdge edge(op.getLoc(), scope.lookup(op.getSrc()), accOut);
-  scope.addEdge(edge);
-
+  scope.routeWrite(scope.lookup(op.getSrc()), accOut);
   scope.mapConnector(op.getDest(), accOut);
   return success();
 }
@@ -727,6 +721,12 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
     AllocOp allocOp = cast<AllocOp>(op.getArr().getDefiningOp());
     name = allocOp.getName().value_or(name);
     init = allocOp->hasAttr("init");
+  }
+
+  // In a map/consume scope we need to check if there is an other write.
+  // If there is we will only add a transient array. Other write will propagate.
+  if (scope.getType() == NType::MapEntry ||
+      scope.getType() == NType::ConsumeEntry) {
   }
 
   Access access(op.getLoc(), init);
