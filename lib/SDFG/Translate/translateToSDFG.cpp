@@ -583,6 +583,28 @@ LogicalResult translation::collect(MapNode &op, ScopeNode &scope) {
     mapEntry.addRange(r);
   }
 
+  // FIXME: It would be cleaner if users would directly incorporate it as a
+  // symbol.
+  for (BlockArgument bArg : op.getBody().getArguments()) {
+    bool usedByNonMemlet = false;
+    for (Operation *user : bArg.getUsers())
+      usedByNonMemlet |= !(isa<StoreOp>(user) || isa<LoadOp>(user));
+    if (!usedByNonMemlet)
+      continue;
+
+    std::string name = sdfg::utils::valueToString(bArg);
+    Tasklet task(op.getLoc());
+    task.setName("SYM" + name);
+
+    Connector taskOut(task, "_SYM_OUT");
+    task.addOutConnector(taskOut);
+    Code code("_SYM_OUT = " + name, CodeLanguage::Python);
+    task.setCode(code);
+
+    mapEntry.addNode(task);
+    insertTransientArray(op.getLoc(), taskOut, bArg, mapEntry);
+  }
+
   if (collectOperations(*op, mapEntry).failed())
     return failure();
 
