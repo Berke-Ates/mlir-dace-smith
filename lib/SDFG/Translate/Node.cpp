@@ -1005,19 +1005,16 @@ MapExit MapEntryImpl::getExit() { return exit; }
 
 /// Connects dangling nodes to the map entry.
 void MapEntryImpl::connectDanglingNodes() {
-  bool connectMaps =
-      getOutConnectorCount() == 0 && getExit().getInConnectorCount() == 0;
-
   Connector mapEntryNull(getExit().getEntry());
   addOutConnector(mapEntryNull);
   Connector mapExitNull(getExit());
   getExit().addOutConnector(mapExitNull);
 
-  if (connectMaps) {
-    MultiEdge edge(location, mapEntryNull, mapExitNull);
-    addEdge(edge);
-  }
+  // Ensure map entry and exit are connected.
+  MultiEdge edge(location, mapEntryNull, mapExitNull);
+  addEdge(edge);
 
+  // Connect all nodes without an ingoing edge.
   for (ConnectorNode node : nodes) {
     bool skip = false;
     for (MultiEdge edge : edges)
@@ -1032,6 +1029,7 @@ void MapEntryImpl::connectDanglingNodes() {
     addEdge(edge);
   }
 
+  // Connect all nodes without an outgoing edge.
   for (ConnectorNode node : nodes) {
     bool skip = false;
     for (MultiEdge edge : edges)
