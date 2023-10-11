@@ -89,7 +89,16 @@ enum class DType {
 };
 
 /// Node Types.
-enum class NType { SDFG, State, Access, MapEntry, ConsumeEntry, Other };
+enum class NType {
+  SDFG,
+  State,
+  Access,
+  MapEntry,
+  MapExit,
+  ConsumeEntry,
+  ConsumeExit,
+  Other
+};
 
 /// Programming languages.
 enum class CodeLanguage { Python, CPP, MLIR };
@@ -168,6 +177,11 @@ public:
 
   Range(StringRef start, StringRef end, StringRef step, StringRef tile)
       : start(start), end(end), step(step), tile(tile) {}
+
+  bool operator==(const Range other) const {
+    return other.start == start && other.end == end && other.step == step &&
+           other.tile == tile;
+  }
 
   /// Emits this range to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
@@ -336,12 +350,15 @@ public:
   // IDEA: Add DType?
 
   Connector(ConnectorNode parent)
-      : parent(parent), name("null"), isNull(true) {}
+      : parent(parent), name("null"), isNull(true), ranges({}) {}
   Connector(ConnectorNode parent, StringRef name)
-      : parent(parent), name(name), isNull(false) {}
+      : parent(parent), name(name), isNull(false), ranges({}) {}
 
   bool operator==(const Connector other) const {
-    return other.parent == parent && other.name == name;
+    return other.parent == parent && other.name == name &&
+           ((other.isNull && isNull) ||
+            (!other.isNull && !isNull && other.ranges == ranges &&
+             other.data == data));
   }
 
   /// Adds a data range to the connector.
@@ -370,6 +387,11 @@ private:
 public:
   MultiEdge(Location location, Connector source, Connector destination)
       : location(location), source(source), destination(destination) {}
+
+  /// Returns the source connector of this edge.
+  Connector getSource();
+  /// Returns the destination connector of this edge.
+  Connector getDestination();
 
   /// Emits this edge to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
@@ -820,6 +842,8 @@ public:
   void setExit(MapExit exit);
   /// Returns the matching map exit.
   MapExit getExit();
+  /// Connects dangling nodes to the map entry.
+  void connectDanglingNodes();
   /// Adds a connector node to the scope.
   void addNode(ConnectorNode node) override;
   /// Adds a multiedge from the source to the destination connector.
@@ -846,12 +870,16 @@ public:
   MapExit(Location location)
       : ConnectorNode(std::static_pointer_cast<ConnectorNodeImpl>(
             std::make_shared<MapExitImpl>(location))),
-        ptr(std::static_pointer_cast<MapExitImpl>(ConnectorNode::ptr)) {}
+        ptr(std::static_pointer_cast<MapExitImpl>(ConnectorNode::ptr)) {
+    type = NType::MapExit;
+  }
 
   MapExit() : ConnectorNode(nullptr) {}
 
   /// Sets the map entry this map exit belongs to.
   void setEntry(MapEntry entry);
+  /// Returns the matching map entry.
+  MapEntry getEntry();
 
   /// Emits the map exit to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
@@ -878,6 +906,8 @@ public:
   void setExit(MapExit exit);
   /// Returns the matching map exit.
   MapExit getExit();
+  /// Connects dangling nodes to the map entry.
+  void connectDanglingNodes();
   /// Adds a connector node to the scope.
   void addNode(ConnectorNode node) override;
   /// Adds a multiedge from the source to the destination connector.
@@ -905,6 +935,8 @@ public:
 
   /// Sets the map entry this map exit belongs to.
   void setEntry(MapEntry entry);
+  /// Returns the matching map entry.
+  MapEntry getEntry();
 
   /// Emits the map exit to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
@@ -972,7 +1004,9 @@ public:
   ConsumeExit(Location location)
       : ConnectorNode(std::static_pointer_cast<ConnectorNodeImpl>(
             std::make_shared<ConsumeExitImpl>(location))),
-        ptr(std::static_pointer_cast<ConsumeExitImpl>(ConnectorNode::ptr)) {}
+        ptr(std::static_pointer_cast<ConsumeExitImpl>(ConnectorNode::ptr)) {
+    type = NType::ConsumeExit;
+  }
 
   ConsumeExit() : ConnectorNode(nullptr) {}
 

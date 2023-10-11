@@ -300,6 +300,12 @@ void InterstateEdgeImpl::emit(emitter::JsonEmitter &jemit) {
 // MultiEdge
 //===----------------------------------------------------------------------===//
 
+/// Returns the source connector of this edge.
+Connector MultiEdge::getSource() { return source; }
+
+/// Returns the destination connector of this edge.
+Connector MultiEdge::getDestination() { return destination; }
+
 /// Emits this edge to the output stream.
 void MultiEdge::emit(emitter::JsonEmitter &jemit) {
   jemit.startObject();
@@ -455,24 +461,28 @@ void ConnectorNode::emit(emitter::JsonEmitter &jemit) { ptr->emit(jemit); }
 
 /// Adds an incoming connector.
 void ConnectorNodeImpl::addInConnector(Connector connector) {
-  if (std::find(inConnectors.begin(), inConnectors.end(), connector) !=
-      inConnectors.end()) {
-    emitError(location,
-              "Duplicate connector in ConnectorNodeImpl::addInConnector: " +
-                  connector.name);
-  }
+  for (Connector c : inConnectors)
+    if (c.name == connector.name && c.parent == connector.parent)
+      if (c == connector)
+        return;
+      else
+        emitError(location, "Conflicting duplicate connectors in "
+                            "ConnectorNodeImpl::addInConnector: " +
+                                c.name);
 
   inConnectors.push_back(connector);
 }
 
 /// Adds an outgoing connector.
 void ConnectorNodeImpl::addOutConnector(Connector connector) {
-  if (std::find(outConnectors.begin(), outConnectors.end(), connector) !=
-      outConnectors.end()) {
-    emitError(location,
-              "Duplicate connector in ConnectorNodeImpl::addOutConnector: " +
-                  connector.name);
-  }
+  for (Connector c : outConnectors)
+    if (c.name == connector.name && c.parent == connector.parent)
+      if (c == connector)
+        return;
+      else
+        emitError(location, "Conflicting duplicate connectors in "
+                            "ConnectorNodeImpl::addOutConnector: " +
+                                c.name);
 
   outConnectors.push_back(connector);
 }
@@ -952,6 +962,9 @@ void MapEntry::setExit(MapExit exit) { ptr->setExit(exit); }
 /// Returns the matching map exit.
 MapExit MapEntry::getExit() { return ptr->getExit(); }
 
+/// Connects dangling nodes to the map entry.
+void MapEntry::connectDanglingNodes() { return ptr->connectDanglingNodes(); }
+
 /// Adds a connector node to the scope.
 void MapEntry::addNode(ConnectorNode node) {
   node.setParent(*this);
@@ -990,14 +1003,62 @@ void MapEntryImpl::setExit(MapExit exit) { this->exit = exit; }
 /// Returns the matching map exit.
 MapExit MapEntryImpl::getExit() { return exit; }
 
+/// Connects dangling nodes to the map entry.
+void MapEntryImpl::connectDanglingNodes() {
+  bool connectMaps =
+      getOutConnectorCount() == 0 && getExit().getInConnectorCount() == 0;
+
+  Connector mapEntryNull(getExit().getEntry());
+  addOutConnector(mapEntryNull);
+  Connector mapExitNull(getExit());
+  getExit().addOutConnector(mapExitNull);
+
+  if (connectMaps) {
+    MultiEdge edge(location, mapEntryNull, mapExitNull);
+    addEdge(edge);
+  }
+
+  for (ConnectorNode node : nodes) {
+    bool skip = false;
+    for (MultiEdge edge : edges)
+      skip |= edge.getDestination().parent == node;
+    if (skip || node.getType() == NType::ConsumeExit ||
+        node.getType() == NType::MapExit)
+      continue;
+
+    Connector connector(node);
+    node.addInConnector(node);
+    MultiEdge edge(location, mapEntryNull, connector);
+    addEdge(edge);
+  }
+
+  for (ConnectorNode node : nodes) {
+    bool skip = false;
+    for (MultiEdge edge : edges)
+      skip |= edge.getSource().parent == node;
+    if (skip || node.getType() == NType::ConsumeEntry ||
+        node.getType() == NType::MapEntry)
+      continue;
+
+    Connector connector(node);
+    node.addOutConnector(node);
+    MultiEdge edge(location, connector, mapExitNull);
+    addEdge(edge);
+  }
+}
+
 /// Adds a connector node to the scope.
 void MapEntryImpl::addNode(ConnectorNode node) {
   ScopeNode scope(parent);
   scope.addNode(node);
+  nodes.push_back(node);
 }
 
 /// Adds a multiedge from the source to the destination connector.
 void MapEntryImpl::routeWrite(Connector from, Connector to) {
+  if (llvm::is_contained(nodes, to.parent))
+    llvm::erase_value(nodes, to.parent);
+
   MapExit mapExit = getExit();
   Connector in(mapExit, "IN_" + std::to_string(mapExit.getInConnectorCount()));
   in.setData(from.data);
@@ -1021,6 +1082,7 @@ void MapEntryImpl::routeWrite(Connector from, Connector to) {
 void MapEntryImpl::addEdge(MultiEdge edge) {
   ScopeNode scope(parent);
   scope.addEdge(edge);
+  edges.push_back(edge);
 }
 
 /// Maps the MLIR value to the specified connector.
@@ -1044,13 +1106,13 @@ Connector MapEntryImpl::lookup(Value value, MapEntry mapEntry) {
     addInConnector(dstConn);
 
     MultiEdge multiedge(location, srcConn, dstConn);
-    scope.addEdge(multiedge);
+    addEdge(multiedge);
 
     Connector outConn(mapEntry, "OUT" + utils::valueToString(value));
     outConn.setData(dstConn.data);
     outConn.setRanges(dstConn.ranges);
     addOutConnector(outConn);
-    ScopeNodeImpl::mapConnector(value, outConn);
+    mapConnector(value, outConn);
   }
 
   return ScopeNodeImpl::lookup(value);
@@ -1086,11 +1148,17 @@ void MapEntryImpl::emit(emitter::JsonEmitter &jemit) {
 /// Sets the map entry this map exit belongs to.
 void MapExit::setEntry(MapEntry entry) { ptr->setEntry(entry); }
 
+/// Returns the matching map entry.
+MapEntry MapExit::getEntry() { return ptr->getEntry(); }
+
 /// Emits the map exit to the output stream.
 void MapExit::emit(emitter::JsonEmitter &jemit) { ptr->emit(jemit); }
 
 /// Sets the map entry this map exit belongs to.
 void MapExitImpl::setEntry(MapEntry entry) { this->entry = entry; }
+
+/// Returns the matching map entry.
+MapEntry MapExitImpl::getEntry() { return entry; }
 
 /// Emits the map exit to the output stream.
 void MapExitImpl::emit(emitter::JsonEmitter &jemit) {

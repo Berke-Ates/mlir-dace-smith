@@ -586,6 +586,7 @@ LogicalResult translation::collect(MapNode &op, ScopeNode &scope) {
   if (collectOperations(*op, mapEntry).failed())
     return failure();
 
+  mapEntry.connectDanglingNodes();
   return success();
 }
 
