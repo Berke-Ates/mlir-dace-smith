@@ -888,7 +888,12 @@ std::string TaskletNode::getOutputName(unsigned idx) {
   if (!terminator)
     return "__out" + std::to_string(idx);
 
-  return sdfg::utils::valueToString(terminator->getOperand(idx));
+  std::string name = sdfg::utils::valueToString(terminator->getOperand(idx));
+  for (unsigned i = 0; i < getBody().getNumArguments(); ++i)
+    if (getInputName(i) == name)
+      return "__out" + name;
+
+  return name;
 }
 
 //===----------------------------------------------------------------------===//

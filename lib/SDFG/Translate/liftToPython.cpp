@@ -674,8 +674,22 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
     return nameOut + " = len(" + streamName + ")";
   }
 
-  if (isa<sdfg::ReturnOp>(op)) {
-    return "";
+  if (isa<sdfg::ReturnOp>(op) && isa<TaskletNode>(source)) {
+    std::string code = "";
+    TaskletNode tasklet = cast<TaskletNode>(source);
+
+    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
+
+      // Only copy if the output connector differs from the variable name.
+      std::string name = sdfg::utils::valueToString(op.getOperand(i), op);
+      if (name == tasklet.getOutputName(i))
+        continue;
+
+      if (i > 0)
+        code.append("\\n");
+      code.append(tasklet.getOutputName(i) + " = " + name);
+    }
+    return code;
   }
 
   //===--------------------------------------------------------------------===//
