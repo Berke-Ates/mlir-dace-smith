@@ -529,8 +529,8 @@ void ScopeNode::addNode(ConnectorNode node) {
 }
 
 /// Adds a multiedge from the source to the destination connector.
-void ScopeNode::routeWrite(Connector from, Connector to) {
-  ptr->routeWrite(from, to);
+void ScopeNode::routeWrite(Connector from, Connector to, Value mapValue) {
+  ptr->routeWrite(from, to, mapValue);
 }
 
 /// Adds an edge to the scope.
@@ -564,9 +564,10 @@ void ScopeNodeImpl::addNode(ConnectorNode node) {
 }
 
 /// Adds a multiedge from the source to the destination connector.
-void ScopeNodeImpl::routeWrite(Connector from, Connector to) {
+void ScopeNodeImpl::routeWrite(Connector from, Connector to, Value mapValue) {
   MultiEdge edge(location, from, to);
   addEdge(edge);
+  mapConnector(mapValue, to);
 }
 
 /// Adds an edge to the scope.
@@ -972,8 +973,8 @@ void MapEntry::addNode(ConnectorNode node) {
 }
 
 /// Adds a multiedge from the source to the destination connector.
-void MapEntry::routeWrite(Connector from, Connector to) {
-  ptr->routeWrite(from, to);
+void MapEntry::routeWrite(Connector from, Connector to, Value mapValue) {
+  ptr->routeWrite(from, to, mapValue);
 }
 
 /// Adds an edge to the scope.
@@ -1053,7 +1054,7 @@ void MapEntryImpl::addNode(ConnectorNode node) {
 }
 
 /// Adds a multiedge from the source to the destination connector.
-void MapEntryImpl::routeWrite(Connector from, Connector to) {
+void MapEntryImpl::routeWrite(Connector from, Connector to, Value mapValue) {
   if (llvm::is_contained(nodes, to.parent))
     llvm::erase_value(nodes, to.parent);
 
@@ -1073,7 +1074,7 @@ void MapEntryImpl::routeWrite(Connector from, Connector to) {
   mapExit.addOutConnector(out);
 
   ScopeNode scope(parent);
-  scope.routeWrite(out, to);
+  scope.routeWrite(out, to, mapValue);
 }
 
 /// Adds an edge to the scope.
@@ -1192,8 +1193,8 @@ void ConsumeEntry::addNode(ConnectorNode node) {
 }
 
 /// Adds a multiedge from the source to the destination connector.
-void ConsumeEntry::routeWrite(Connector from, Connector to) {
-  ptr->routeWrite(from, to);
+void ConsumeEntry::routeWrite(Connector from, Connector to, Value mapValue) {
+  ptr->routeWrite(from, to, mapValue);
 }
 
 /// Adds an edge to the scope.
@@ -1236,7 +1237,8 @@ void ConsumeEntryImpl::addNode(ConnectorNode node) {
 }
 
 /// Adds a multiedge from the source to the destination connector.
-void ConsumeEntryImpl::routeWrite(Connector from, Connector to) {
+void ConsumeEntryImpl::routeWrite(Connector from, Connector to,
+                                  Value mapValue) {
   ConsumeExit consumeExit = getExit();
   Connector in(consumeExit,
                "IN_" + std::to_string(consumeExit.getInConnectorCount()));
@@ -1254,7 +1256,7 @@ void ConsumeEntryImpl::routeWrite(Connector from, Connector to) {
   consumeExit.addOutConnector(out);
 
   ScopeNode scope(parent);
-  scope.routeWrite(out, to);
+  scope.routeWrite(out, to, mapValue);
 }
 
 /// Adds an edge to the scope.

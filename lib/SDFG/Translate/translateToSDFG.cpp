@@ -703,8 +703,7 @@ LogicalResult translation::collect(CopyOp &op, ScopeNode &scope) {
   Connector accOut(access);
   access.addOutConnector(accOut);
 
-  scope.routeWrite(scope.lookup(op.getSrc()), accOut);
-  scope.mapConnector(op.getDest(), accOut);
+  scope.routeWrite(scope.lookup(op.getSrc()), accOut, op.getDest());
   return success();
 }
 
@@ -750,8 +749,7 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
     }
 
     Connector source = scope.lookup(op.getVal());
-    scope.routeWrite(source, accOut);
-    scope.mapConnector(op.getArr(), accOut);
+    scope.routeWrite(source, accOut, op.getArr());
     return success();
   }
 
@@ -797,8 +795,7 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
       }
     }
 
-    scope.routeWrite(scope.lookup(op.getVal()), accOut);
-    scope.mapConnector(op.getArr(), accOut);
+    scope.routeWrite(scope.lookup(op.getVal()), accOut, op.getArr());
     return success();
   }
 
@@ -847,8 +844,7 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
 
   task.setCode(Code(accessCode, CodeLanguage::Python));
 
-  scope.routeWrite(taskArr, accOut);
-  scope.mapConnector(op.getArr(), accOut);
+  scope.routeWrite(taskArr, accOut, op.getArr());
   return success();
 }
 
@@ -1041,8 +1037,7 @@ LogicalResult translation::collect(StreamPushOp &op, ScopeNode &scope) {
   access.addOutConnector(accOut);
 
   Connector source = scope.lookup(op.getVal());
-  scope.routeWrite(source, accOut);
-  scope.mapConnector(op.getStr(), accOut);
+  scope.routeWrite(source, accOut, op.getStr());
 
   return success();
 }

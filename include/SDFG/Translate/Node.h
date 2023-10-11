@@ -419,7 +419,7 @@ public:
   /// Adds a connector node to the scope.
   virtual void addNode(ConnectorNode node);
   /// Adds a multiedge from the source to the destination connector.
-  virtual void routeWrite(Connector from, Connector to);
+  virtual void routeWrite(Connector from, Connector to, Value mapValue);
   /// Adds an edge to the scope.
   virtual void addEdge(MultiEdge edge);
   /// Maps the MLIR value to the specified connector.
@@ -447,7 +447,7 @@ public:
   /// Adds a connector node to the scope.
   virtual void addNode(ConnectorNode node);
   /// Adds a multiedge from the source to the destination connector.
-  virtual void routeWrite(Connector from, Connector to);
+  virtual void routeWrite(Connector from, Connector to, Value mapValue);
   /// Adds an edge to the scope.
   virtual void addEdge(MultiEdge edge);
   /// Maps the MLIR value to the specified connector.
@@ -847,7 +847,7 @@ public:
   /// Adds a connector node to the scope.
   void addNode(ConnectorNode node) override;
   /// Adds a multiedge from the source to the destination connector.
-  void routeWrite(Connector from, Connector to) override;
+  void routeWrite(Connector from, Connector to, Value mapValue) override;
   /// Adds an edge to the scope.
   void addEdge(MultiEdge edge) override;
   /// Maps the MLIR value to the specified connector.
@@ -911,7 +911,7 @@ public:
   /// Adds a connector node to the scope.
   void addNode(ConnectorNode node) override;
   /// Adds a multiedge from the source to the destination connector.
-  void routeWrite(Connector from, Connector to) override;
+  void routeWrite(Connector from, Connector to, Value mapValue) override;
   /// Adds an edge to the scope.
   void addEdge(MultiEdge edge) override;
   /// Maps the MLIR value to the specified connector.
@@ -973,7 +973,7 @@ public:
   /// Adds a connector node to the scope.
   void addNode(ConnectorNode node) override;
   /// Adds a multiedge from the source to the destination connector.
-  void routeWrite(Connector from, Connector to) override;
+  void routeWrite(Connector from, Connector to, Value mapValue) override;
 
   /// Adds an edge to the scope.
   void addEdge(MultiEdge edge) override;
@@ -1039,7 +1039,7 @@ public:
   /// Adds a connector node to the scope.
   void addNode(ConnectorNode node) override;
   /// Adds a multiedge from the source to the destination connector.
-  void routeWrite(Connector from, Connector to) override;
+  void routeWrite(Connector from, Connector to, Value mapValue) override;
 
   /// Adds an edge to the scope.
   void addEdge(MultiEdge edge) override;
