@@ -462,13 +462,15 @@ void ConnectorNode::emit(emitter::JsonEmitter &jemit) { ptr->emit(jemit); }
 /// Adds an incoming connector.
 void ConnectorNodeImpl::addInConnector(Connector connector) {
   for (Connector c : inConnectors)
-    if (c.name == connector.name && c.parent == connector.parent)
-      if (c == connector)
+    if (c.name == connector.name && c.parent == connector.parent) {
+      if (c == connector) {
         return;
-      else
+      } else {
         emitError(location, "Conflicting duplicate connectors in "
                             "ConnectorNodeImpl::addInConnector: " +
                                 c.name);
+      }
+    }
 
   inConnectors.push_back(connector);
 }
@@ -476,13 +478,15 @@ void ConnectorNodeImpl::addInConnector(Connector connector) {
 /// Adds an outgoing connector.
 void ConnectorNodeImpl::addOutConnector(Connector connector) {
   for (Connector c : outConnectors)
-    if (c.name == connector.name && c.parent == connector.parent)
-      if (c == connector)
+    if (c.name == connector.name && c.parent == connector.parent) {
+      if (c == connector) {
         return;
-      else
+      } else {
         emitError(location, "Conflicting duplicate connectors in "
                             "ConnectorNodeImpl::addOutConnector: " +
                                 c.name);
+      }
+    }
 
   outConnectors.push_back(connector);
 }
@@ -565,8 +569,8 @@ void ScopeNodeImpl::addNode(ConnectorNode node) {
 
 /// Adds a multiedge from the source to the destination connector.
 void ScopeNodeImpl::routeWrite(Connector from, Connector to, Value mapValue) {
-  MultiEdge edge(location, from, to);
-  addEdge(edge);
+  addNode(to.parent);
+  addEdge(MultiEdge(location, from, to));
   mapConnector(mapValue, to);
 }
 
@@ -611,10 +615,7 @@ void ScopeNodeImpl::emit(emitter::JsonEmitter &jemit) {
 State SDFG::lookup(StringRef name) { return ptr->lookup(name); }
 
 /// Adds a state to the SDFG.
-void SDFG::addState(State state) {
-  state.setParent(*this);
-  ptr->addState(state);
-}
+void SDFG::addState(State state) { ptr->addState(state); }
 
 /// Adds a state to the SDFG and marks it as the entry state.
 void SDFG::setStartState(State state) { ptr->setStartState(state); }
@@ -648,6 +649,7 @@ State SDFGImpl::lookup(StringRef name) { return lut.find(name.str())->second; }
 
 /// Adds a state to the SDFG.
 void SDFGImpl::addState(State state) {
+  state.setParent(SDFG(shared_from_this()));
   state.setID(states.size());
   states.push_back(state);
 
@@ -967,10 +969,7 @@ MapExit MapEntry::getExit() { return ptr->getExit(); }
 void MapEntry::connectDanglingNodes() { return ptr->connectDanglingNodes(); }
 
 /// Adds a connector node to the scope.
-void MapEntry::addNode(ConnectorNode node) {
-  node.setParent(*this);
-  ptr->addNode(node);
-}
+void MapEntry::addNode(ConnectorNode node) { ptr->addNode(node); }
 
 /// Adds a multiedge from the source to the destination connector.
 void MapEntry::routeWrite(Connector from, Connector to, Value mapValue) {
@@ -987,7 +986,7 @@ void MapEntry::mapConnector(Value value, Connector connector) {
 
 /// Returns the connector associated with a MLIR value, inserting map
 /// connectors when needed.
-Connector MapEntry::lookup(Value value) { return ptr->lookup(value, *this); }
+Connector MapEntry::lookup(Value value) { return ptr->lookup(value); }
 
 /// Emits the map entry to the output stream.
 void MapEntry::emit(emitter::JsonEmitter &jemit) { ptr->emit(jemit); }
@@ -1048,24 +1047,42 @@ void MapEntryImpl::connectDanglingNodes() {
 
 /// Adds a connector node to the scope.
 void MapEntryImpl::addNode(ConnectorNode node) {
-  ScopeNode scope(parent);
-  scope.addNode(node);
+  node.setParent(MapEntry(shared_from_this()));
+  parent.getState().addNode(node);
   nodes.push_back(node);
 }
 
 /// Adds a multiedge from the source to the destination connector.
 void MapEntryImpl::routeWrite(Connector from, Connector to, Value mapValue) {
-  if (llvm::is_contained(nodes, to.parent))
-    llvm::erase_value(nodes, to.parent);
+  // Array array(sdfg::utils::generateName("tmp"), /*transient=*/true,
+  //             /*stream=*/false, /*init=*/false, mapValue.getType());
+  // if (sdfg::utils::isSizedType(mapValue.getType()))
+  //   array = Array(sdfg::utils::generateName("tmp"), /*transient=*/true,
+  //                 /*stream=*/false, /*init=*/false,
+  //                 sdfg::utils::getSizedType(mapValue.getType()));
+
+  // getExit().getSDFG().addArray(array);
+  // Access access(location, false);
+  // access.setName(array.name);
+  // addNode(access);
+
+  // Connector accIn(access);
+  // Connector accOut(access);
+
+  // accIn.setData(array.name);
+  // accOut.setData(array.name);
+
+  // access.addInConnector(accIn);
+  // access.addOutConnector(accOut);
+  // addEdge(MultiEdge(location, from, accIn));
+  // mapConnector(mapValue, accOut);
 
   MapExit mapExit = getExit();
   Connector in(mapExit, "IN_" + std::to_string(mapExit.getInConnectorCount()));
   in.setData(from.data);
   in.setRanges(from.ranges);
   mapExit.addInConnector(in);
-
-  MultiEdge edge(location, from, in);
-  addEdge(edge);
+  addEdge(MultiEdge(location, from, in));
 
   Connector out(mapExit,
                 "OUT_" + std::to_string(mapExit.getOutConnectorCount()));
@@ -1079,8 +1096,7 @@ void MapEntryImpl::routeWrite(Connector from, Connector to, Value mapValue) {
 
 /// Adds an edge to the scope.
 void MapEntryImpl::addEdge(MultiEdge edge) {
-  ScopeNode scope(parent);
-  scope.addEdge(edge);
+  parent.getState().addEdge(edge);
   edges.push_back(edge);
 }
 
@@ -1094,11 +1110,12 @@ void MapEntryImpl::mapConnector(Value value, Connector connector) {
 
 /// Returns the connector associated with a MLIR value, inserting map
 /// connectors when needed.
-Connector MapEntryImpl::lookup(Value value, MapEntry mapEntry) {
+Connector MapEntryImpl::lookup(Value value) {
   if (lut.find(utils::valueToString(value)) == lut.end()) {
     ScopeNode scope(parent);
     Connector srcConn = scope.lookup(value);
 
+    MapEntry mapEntry(shared_from_this());
     Connector dstConn(mapEntry, "IN" + utils::valueToString(value));
     dstConn.setData(srcConn.data);
     dstConn.setRanges(srcConn.ranges);
@@ -1187,10 +1204,7 @@ void ConsumeEntry::setExit(ConsumeExit exit) { ptr->setExit(exit); }
 ConsumeExit ConsumeEntry::getExit() { return ptr->getExit(); }
 
 /// Adds a connector node to the scope.
-void ConsumeEntry::addNode(ConnectorNode node) {
-  node.setParent(*this);
-  ptr->addNode(node);
-}
+void ConsumeEntry::addNode(ConnectorNode node) { ptr->addNode(node); }
 
 /// Adds a multiedge from the source to the destination connector.
 void ConsumeEntry::routeWrite(Connector from, Connector to, Value mapValue) {
@@ -1207,9 +1221,7 @@ void ConsumeEntry::mapConnector(Value value, Connector connector) {
 
 /// Returns the connector associated with a MLIR value, inserting consume
 /// connectors when needed.
-Connector ConsumeEntry::lookup(Value value) {
-  return ptr->lookup(value, *this);
-}
+Connector ConsumeEntry::lookup(Value value) { return ptr->lookup(value); }
 
 /// Sets the number of processing elements.
 void ConsumeEntry::setNumPes(StringRef pes) { ptr->setNumPes(pes); }
@@ -1233,6 +1245,7 @@ ConsumeExit ConsumeEntryImpl::getExit() { return exit; }
 
 /// Adds a connector node to the scope.
 void ConsumeEntryImpl::addNode(ConnectorNode node) {
+  node.setParent(ConsumeEntry(shared_from_this()));
   getParent().getState().addNode(node);
 }
 
@@ -1274,9 +1287,10 @@ void ConsumeEntryImpl::mapConnector(Value value, Connector connector) {
 
 /// Returns the connector associated with a MLIR value, inserting consume
 /// connectors when needed.
-Connector ConsumeEntryImpl::lookup(Value value, ConsumeEntry entry) {
+Connector ConsumeEntryImpl::lookup(Value value) {
   if (lut.find(utils::valueToString(value)) == lut.end()) {
     ScopeNode scope(parent);
+    ConsumeEntry entry(shared_from_this());
 
     Connector srcConn = scope.lookup(value);
     Connector dstConn(entry, "IN_" + utils::valueToString(value));

@@ -68,6 +68,7 @@ class ConsumeExitImpl;
 /// All classes that can be printed (emitted) implement this interface.
 class Emittable {
 public:
+  virtual ~Emittable() {}
   virtual void emit(emitter::JsonEmitter &jemit) = 0;
 };
 
@@ -147,7 +148,7 @@ public:
 };
 
 /// Represents a DaCe data container.
-class Array : public Emittable {
+class Array final : public Emittable {
 public:
   std::string name;
   bool transient;
@@ -168,7 +169,7 @@ public:
 };
 
 /// Represents a range for memlets.
-class Range : public Emittable {
+class Range final : public Emittable {
 public:
   std::string start;
   std::string end;
@@ -201,6 +202,7 @@ protected:
 
 public:
   Node(std::shared_ptr<NodeImpl> ptr) : ptr(ptr), type(NType::Other) {}
+  virtual ~Node() {}
 
   bool operator==(const Node other) const { return other.ptr == ptr; }
 
@@ -239,7 +241,8 @@ public:
 };
 
 /// Implementation of the base node class.
-class NodeImpl : public Emittable {
+class NodeImpl : public Emittable,
+                 public std::enable_shared_from_this<NodeImpl> {
 protected:
   /// Unique node ID.
   unsigned id;
@@ -254,6 +257,7 @@ protected:
 
 public:
   NodeImpl(Location location) : id(0), location(location), parent(nullptr) {}
+  virtual ~NodeImpl() {}
 
   /// ID setter.
   void setID(unsigned id);
@@ -297,6 +301,8 @@ public:
   ConnectorNode(Node n)
       : Node(n), ptr(std::static_pointer_cast<ConnectorNodeImpl>(Node::ptr)) {}
 
+  virtual ~ConnectorNode() {}
+
   /// Adds an incoming connector.
   void addInConnector(Connector connector);
   /// Adds an outgoing connector.
@@ -320,6 +326,7 @@ protected:
 
 public:
   ConnectorNodeImpl(Location location) : NodeImpl(location) {}
+  virtual ~ConnectorNodeImpl() {}
 
   /// Adds an incoming connector.
   void addInConnector(Connector connector);
@@ -375,7 +382,7 @@ public:
 
 // IDEA: Rewrite to use PImpl?
 /// Represents an edge moving data between multiple connectors (memlet).
-class MultiEdge : public Emittable {
+class MultiEdge final : public Emittable {
 private:
   /// Source code location.
   Location location;
@@ -416,6 +423,8 @@ public:
       : ConnectorNode(n),
         ptr(std::static_pointer_cast<ScopeNodeImpl>(Node::ptr)) {}
 
+  virtual ~ScopeNode() {}
+
   /// Adds a connector node to the scope.
   virtual void addNode(ConnectorNode node);
   /// Adds a multiedge from the source to the destination connector.
@@ -443,6 +452,7 @@ protected:
 
 public:
   ScopeNodeImpl(Location location) : ConnectorNodeImpl(location) {}
+  virtual ~ScopeNodeImpl() {}
 
   /// Adds a connector node to the scope.
   virtual void addNode(ConnectorNode node);
@@ -464,7 +474,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Represents a SDFG state.
-class State : public ScopeNode {
+class State final : public ScopeNode {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<StateImpl> ptr;
@@ -491,7 +501,7 @@ public:
 };
 
 /// Implementation of the state node class.
-class StateImpl : public ScopeNodeImpl {
+class StateImpl final : public ScopeNodeImpl {
 public:
   StateImpl(Location location) : ScopeNodeImpl(location) {}
 
@@ -508,7 +518,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Represents the top-level SDFG.
-class SDFG : public Node {
+class SDFG final : public Node {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<SDFGImpl> ptr;
@@ -523,6 +533,10 @@ public:
       : Node(std::static_pointer_cast<NodeImpl>(
             std::make_shared<SDFGImpl>(location))),
         ptr(std::static_pointer_cast<SDFGImpl>(Node::ptr)) {
+    type = NType::SDFG;
+  }
+
+  SDFG(Node n) : Node(n), ptr(std::static_pointer_cast<SDFGImpl>(Node::ptr)) {
     type = NType::SDFG;
   }
 
@@ -550,7 +564,7 @@ public:
 };
 
 /// Implementation of the SDFG node class.
-class SDFGImpl : public NodeImpl {
+class SDFGImpl final : public NodeImpl {
 private:
   /// Lookup table mapping names to states.
   std::map<std::string, State> lut;
@@ -605,7 +619,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Represents a nested SDFG.
-class NestedSDFG : public ConnectorNode {
+class NestedSDFG final : public ConnectorNode {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<NestedSDFGImpl> ptr;
@@ -621,7 +635,7 @@ public:
 };
 
 /// Implementation of the nested SDFG node class.
-class NestedSDFGImpl : public ConnectorNodeImpl {
+class NestedSDFGImpl final : public ConnectorNodeImpl {
 private:
   /// The contained SDFG.
   SDFG sdfg;
@@ -639,7 +653,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Represents an edge connecting muliple states.
-class InterstateEdge : public Emittable {
+class InterstateEdge final : public Emittable {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<InterstateEdgeImpl> ptr;
@@ -659,7 +673,7 @@ public:
 };
 
 /// Implementation of the interstate edge class.
-class InterstateEdgeImpl : public Emittable {
+class InterstateEdgeImpl final : public Emittable {
 private:
   /// Source code location.
   Location location;
@@ -692,7 +706,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Represents a SDFG tasklet.
-class Tasklet : public ConnectorNode {
+class Tasklet final : public ConnectorNode {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<TaskletImpl> ptr;
@@ -715,7 +729,7 @@ public:
 };
 
 /// Implementation of the tasklet node class.
-class TaskletImpl : public ConnectorNodeImpl {
+class TaskletImpl final : public ConnectorNodeImpl {
 private:
   /// The code in the tasklet.
   Code code;
@@ -744,7 +758,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Represents a SDFG libary node.
-class Library : public ConnectorNode {
+class Library final : public ConnectorNode {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<LibraryImpl> ptr;
@@ -762,7 +776,7 @@ public:
 };
 
 /// Implementation of the library node class.
-class LibraryImpl : public ConnectorNodeImpl {
+class LibraryImpl final : public ConnectorNodeImpl {
 private:
   /// The path to the library code.
   std::string classpath;
@@ -781,7 +795,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Represents an access node in the SDFG.
-class Access : public ConnectorNode {
+class Access final : public ConnectorNode {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<AccessImpl> ptr;
@@ -799,7 +813,7 @@ public:
 };
 
 /// Implementation of the access node class.
-class AccessImpl : public ConnectorNodeImpl {
+class AccessImpl final : public ConnectorNodeImpl {
 private:
   bool init;
 
@@ -816,7 +830,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Represents a map entry node in the SDFG.
-class MapEntry : public ScopeNode {
+class MapEntry final : public ScopeNode {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<MapEntryImpl> ptr;
@@ -830,7 +844,9 @@ public:
   }
 
   MapEntry(Node n)
-      : ScopeNode(n), ptr(std::static_pointer_cast<MapEntryImpl>(Node::ptr)) {}
+      : ScopeNode(n), ptr(std::static_pointer_cast<MapEntryImpl>(Node::ptr)) {
+    type = NType::MapEntry;
+  }
 
   MapEntry() : ScopeNode(nullptr) {}
 
@@ -861,7 +877,7 @@ public:
 };
 
 /// Represents a map exit node in the SDFG.
-class MapExit : public ConnectorNode {
+class MapExit final : public ConnectorNode {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<MapExitImpl> ptr;
@@ -886,7 +902,7 @@ public:
 };
 
 /// Implementation of the map entry node class.
-class MapEntryImpl : public ScopeNodeImpl {
+class MapEntryImpl final : public ScopeNodeImpl {
 private:
   /// The matching map exit.
   MapExit exit;
@@ -918,14 +934,14 @@ public:
   void mapConnector(Value value, Connector connector) override;
   /// Returns the connector associated with a MLIR value, inserting map
   /// connectors when needed.
-  Connector lookup(Value value, MapEntry mapEntry);
+  Connector lookup(Value value) override;
 
   /// Emits the map entry to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
 };
 
 /// Implementation of the map exit node class.
-class MapExitImpl : public ConnectorNodeImpl {
+class MapExitImpl final : public ConnectorNodeImpl {
 private:
   /// The matching map entry.
   MapEntry entry;
@@ -947,7 +963,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Represents a consume entry node in the SDFG.
-class ConsumeEntry : public ScopeNode {
+class ConsumeEntry final : public ScopeNode {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<ConsumeEntryImpl> ptr;
@@ -962,7 +978,9 @@ public:
 
   ConsumeEntry(Node n)
       : ScopeNode(n),
-        ptr(std::static_pointer_cast<ConsumeEntryImpl>(Node::ptr)) {}
+        ptr(std::static_pointer_cast<ConsumeEntryImpl>(Node::ptr)) {
+    type = NType::ConsumeEntry;
+  }
 
   ConsumeEntry() : ScopeNode(nullptr) {}
 
@@ -995,7 +1013,7 @@ public:
 };
 
 /// Represents a consume exit node in the SDFG.
-class ConsumeExit : public ConnectorNode {
+class ConsumeExit final : public ConnectorNode {
 private:
   /// Pointer to the implementation (Pimpl idiom).
   std::shared_ptr<ConsumeExitImpl> ptr;
@@ -1018,7 +1036,7 @@ public:
 };
 
 /// Implementation of the consume entry node class.
-class ConsumeEntryImpl : public ScopeNodeImpl {
+class ConsumeEntryImpl final : public ScopeNodeImpl {
 private:
   /// The matching consume exit.
   ConsumeExit exit;
@@ -1047,7 +1065,7 @@ public:
   void mapConnector(Value value, Connector connector) override;
   /// Returns the connector associated with a MLIR value, inserting consume
   /// connectors when needed.
-  Connector lookup(Value value, ConsumeEntry entry);
+  Connector lookup(Value value) override;
 
   /// Sets the number of processing elements.
   void setNumPes(StringRef pes);
@@ -1061,7 +1079,7 @@ public:
 };
 
 /// Implementation of the consume exit node class.
-class ConsumeExitImpl : public ConnectorNodeImpl {
+class ConsumeExitImpl final : public ConnectorNodeImpl {
 private:
   /// The matching consume entry.
   ConsumeEntry entry;

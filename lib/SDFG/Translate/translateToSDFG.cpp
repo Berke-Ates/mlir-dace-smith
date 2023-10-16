@@ -698,7 +698,6 @@ LogicalResult translation::collect(CopyOp &op, ScopeNode &scope) {
 
   Access access(op.getLoc(), init);
   access.setName(name);
-  scope.addNode(access);
 
   Connector accOut(access);
   access.addOutConnector(accOut);
@@ -722,15 +721,8 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
     init = allocOp->hasAttr("init");
   }
 
-  // In a map/consume scope we need to check if there is an other write.
-  // If there is we will only add a transient array. Other write will propagate.
-  if (scope.getType() == NType::MapEntry ||
-      scope.getType() == NType::ConsumeEntry) {
-  }
-
   Access access(op.getLoc(), init);
   access.setName(name);
-  scope.addNode(access);
 
   Connector accOut(access);
   accOut.setData(name);
@@ -1031,7 +1023,6 @@ LogicalResult translation::collect(StreamPushOp &op, ScopeNode &scope) {
   }
 
   access.setName(name);
-  scope.addNode(access);
 
   Connector accOut(access);
   access.addOutConnector(accOut);
