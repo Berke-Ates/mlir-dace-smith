@@ -699,10 +699,11 @@ LogicalResult translation::collect(CopyOp &op, ScopeNode &scope) {
   Access access(op.getLoc(), init);
   access.setName(name);
 
-  Connector accOut(access);
-  access.addOutConnector(accOut);
+  Connector accIn(access);
+  accIn.setData(name);
+  access.addInConnector(accIn);
 
-  scope.routeWrite(scope.lookup(op.getSrc()), accOut, op.getDest());
+  scope.routeWrite(scope.lookup(op.getSrc()), accIn, op.getDest());
   return success();
 }
 
