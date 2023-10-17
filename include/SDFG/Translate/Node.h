@@ -910,6 +910,11 @@ private:
   std::vector<std::string> params;
   /// Array of ranges for the parameters.
   std::vector<Range> ranges;
+  /// Array of pending write routes.
+  std::vector<std::tuple<Connector, Connector, Value>> writeQueue;
+
+  /// Routes the write to the outer scope.
+  void routeOut(Connector from, Connector to, Value mapValue);
 
 public:
   MapEntryImpl(Location location) : ScopeNodeImpl(location) {}

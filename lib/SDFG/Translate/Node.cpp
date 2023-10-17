@@ -571,7 +571,11 @@ void ScopeNodeImpl::addNode(ConnectorNode node) {
 void ScopeNodeImpl::routeWrite(Connector from, Connector to, Value mapValue) {
   addNode(to.parent);
   addEdge(MultiEdge(location, from, to));
-  mapConnector(mapValue, to);
+
+  Connector out(to.parent);
+  out.setData(to.data);
+  to.parent.addOutConnector(out);
+  mapConnector(mapValue, out);
 }
 
 /// Adds an edge to the scope.
@@ -1014,6 +1018,17 @@ void MapEntryImpl::connectDanglingNodes() {
   MultiEdge edge(location, mapEntryNull, mapExitNull);
   addEdge(edge);
 
+  // Connect all pending writes that are not read in this map.
+  for (const auto &[from, to, mapValue] : writeQueue) {
+    bool skip = false;
+    for (MultiEdge edge : edges)
+      skip |= edge.getSource().parent == from.parent;
+    if (skip)
+      continue;
+
+    routeOut(from, to, mapValue);
+  }
+
   // Connect all nodes without an ingoing edge.
   for (ConnectorNode node : nodes) {
     bool skip = false;
@@ -1052,46 +1067,50 @@ void MapEntryImpl::addNode(ConnectorNode node) {
   nodes.push_back(node);
 }
 
-/// Adds a multiedge from the source to the destination connector.
-void MapEntryImpl::routeWrite(Connector from, Connector to, Value mapValue) {
-  // Array array(sdfg::utils::generateName("tmp"), /*transient=*/true,
-  //             /*stream=*/false, /*init=*/false, mapValue.getType());
-  // if (sdfg::utils::isSizedType(mapValue.getType()))
-  //   array = Array(sdfg::utils::generateName("tmp"), /*transient=*/true,
-  //                 /*stream=*/false, /*init=*/false,
-  //                 sdfg::utils::getSizedType(mapValue.getType()));
-
-  // getExit().getSDFG().addArray(array);
-  // Access access(location, false);
-  // access.setName(array.name);
-  // addNode(access);
-
-  // Connector accIn(access);
-  // Connector accOut(access);
-
-  // accIn.setData(array.name);
-  // accOut.setData(array.name);
-
-  // access.addInConnector(accIn);
-  // access.addOutConnector(accOut);
-  // addEdge(MultiEdge(location, from, accIn));
-  // mapConnector(mapValue, accOut);
-
+/// Routes the write to the outer scope.
+void MapEntryImpl::routeOut(Connector from, Connector to, Value mapValue) {
   MapExit mapExit = getExit();
-  Connector in(mapExit, "IN_" + std::to_string(mapExit.getInConnectorCount()));
+  Connector in(mapExit, "IN_" + utils::valueToString(mapValue));
   in.setData(from.data);
   in.setRanges(from.ranges);
   mapExit.addInConnector(in);
   addEdge(MultiEdge(location, from, in));
 
-  Connector out(mapExit,
-                "OUT_" + std::to_string(mapExit.getOutConnectorCount()));
+  Connector out(mapExit, "OUT_" + utils::valueToString(mapValue));
   out.setData(in.data);
   out.setRanges(in.ranges);
   mapExit.addOutConnector(out);
 
   ScopeNode scope(parent);
   scope.routeWrite(out, to, mapValue);
+}
+
+/// Adds a multiedge from the source to the destination connector.
+void MapEntryImpl::routeWrite(Connector from, Connector to, Value mapValue) {
+  Array array(sdfg::utils::generateName("tmp"), /*transient=*/true,
+              /*stream=*/false, /*init=*/false, mapValue.getType());
+  if (sdfg::utils::isSizedType(mapValue.getType()))
+    array = Array(sdfg::utils::generateName("tmp"), /*transient=*/true,
+                  /*stream=*/false, /*init=*/false,
+                  sdfg::utils::getSizedType(mapValue.getType()));
+
+  parent.getSDFG().addArray(array);
+  Access access(location, false);
+  access.setName(array.name);
+  addNode(access);
+
+  Connector accIn(access);
+  Connector accOut(access);
+
+  accIn.setData(array.name);
+  accOut.setData(array.name);
+
+  access.addInConnector(accIn);
+  access.addOutConnector(accOut);
+  addEdge(MultiEdge(location, from, accIn));
+  mapConnector(mapValue, accOut);
+
+  writeQueue.push_back(std::make_tuple(accOut, to, mapValue));
 }
 
 /// Adds an edge to the scope.
@@ -1116,15 +1135,15 @@ Connector MapEntryImpl::lookup(Value value) {
     Connector srcConn = scope.lookup(value);
 
     MapEntry mapEntry(shared_from_this());
-    Connector dstConn(mapEntry, "IN" + utils::valueToString(value));
+    Connector dstConn(mapEntry, "IN_" + utils::valueToString(value));
     dstConn.setData(srcConn.data);
     dstConn.setRanges(srcConn.ranges);
     addInConnector(dstConn);
 
     MultiEdge multiedge(location, srcConn, dstConn);
-    addEdge(multiedge);
+    scope.addEdge(multiedge);
 
-    Connector outConn(mapEntry, "OUT" + utils::valueToString(value));
+    Connector outConn(mapEntry, "OUT_" + utils::valueToString(value));
     outConn.setData(dstConn.data);
     outConn.setRanges(dstConn.ranges);
     addOutConnector(outConn);
@@ -1252,6 +1271,7 @@ void ConsumeEntryImpl::addNode(ConnectorNode node) {
 /// Adds a multiedge from the source to the destination connector.
 void ConsumeEntryImpl::routeWrite(Connector from, Connector to,
                                   Value mapValue) {
+  // FIXME: Should be fixed like map entry
   ConsumeExit consumeExit = getExit();
   Connector in(consumeExit,
                "IN_" + std::to_string(consumeExit.getInConnectorCount()));
