@@ -732,67 +732,61 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
   ArrayAttr numList = op->getAttr("indices_numList").cast<ArrayAttr>();
   ArrayAttr symNumList = op->getAttr("indices").cast<ArrayAttr>();
 
-  // if (!op.isIndirect()) {
-  //   for (unsigned i = 0; i < numList.size(); ++i) {
-  //     IntegerAttr num = numList[i].cast<IntegerAttr>();
-  //     std::string idx =
-  //         sdfg::utils::attributeToString(symNumList[-num.getInt() - 1], *op);
-  //     Range range(idx, idx, "1", "1");
-  //     accOut.addRange(range);
-  //   }
+  if (!op.isIndirect()) {
+    for (unsigned i = 0; i < numList.size(); ++i) {
+      IntegerAttr num = numList[i].cast<IntegerAttr>();
+      std::string idx =
+          sdfg::utils::attributeToString(symNumList[-num.getInt() - 1], *op);
+      Range range(idx, idx, "1", "1");
+      accIn.addRange(range);
+    }
 
-  //   Connector source = scope.lookup(op.getVal());
-  //   scope.routeWrite(source, accOut, op.getArr());
-  //   return success();
-  // }
+    Connector source = scope.lookup(op.getVal());
+    scope.routeWrite(source, accIn, op.getArr());
+    return success();
+  }
 
-  // // If any of the operands comes from a non-map op
-  // bool dependsOnNonMap = false;
+  // If all the operands comes from a map op, thus symbol.
+  bool dependsPurelyOnMap = true;
 
-  // for (unsigned i = 0; i < numList.size(); ++i) {
-  //   IntegerAttr num = numList[i].cast<IntegerAttr>();
-  //   if (num.getInt() >= 0) {
+  for (unsigned i = 0; i < numList.size(); ++i) {
+    IntegerAttr num = numList[i].cast<IntegerAttr>();
+    if (num.getInt() >= 0) {
+      if (BlockArgument bArg =
+              op.getOperand(num.getInt()).dyn_cast<BlockArgument>()) {
 
-  //     if (BlockArgument bArg =
-  //             op.getOperand(num.getInt()).dyn_cast<BlockArgument>()) {
-  //       if (!isa<MapNode>(bArg.getParentRegion()->getParentOp())) {
-  //         dependsOnNonMap = true;
-  //       } else if (dependsOnNonMap) {
-  //         emitError(op.getLoc(),
-  //                   "Mixing of map-indices and non-map-indices not
-  //                   supported");
-  //         return failure();
-  //       }
-  //     } else if (!dependsOnNonMap && i > 0) {
-  //       emitError(op.getLoc(),
-  //                 "Mixing of map-indices and non-map-indices not supported");
-  //       return failure();
-  //     } else {
-  //       dependsOnNonMap = true;
-  //     }
-  //   }
-  // }
+        if (!isa<MapNode>(bArg.getParentRegion()->getParentOp())) {
+          dependsPurelyOnMap = false;
+          break;
+        }
 
-  // if (!dependsOnNonMap) {
-  //   for (unsigned i = 0; i < numList.size(); ++i) {
-  //     IntegerAttr num = numList[i].cast<IntegerAttr>();
-  //     if (num.getInt() < 0) {
-  //       std::string idx =
-  //           sdfg::utils::attributeToString(symNumList[-num.getInt() - 1],
-  //           *op);
-  //       Range range(idx, idx, "1", "1");
-  //       accOut.addRange(range);
-  //     } else {
-  //       std::string idx =
-  //           sdfg::utils::valueToString(op.getOperand(num.getInt()));
-  //       Range range(idx, idx, "1", "1");
-  //       accOut.addRange(range);
-  //     }
-  //   }
+      } else {
+        dependsPurelyOnMap = false;
+        break;
+      }
+    }
+  }
 
-  //   scope.routeWrite(scope.lookup(op.getVal()), accOut, op.getArr());
-  //   return success();
-  // }
+  if (dependsPurelyOnMap) {
+    for (unsigned i = 0; i < numList.size(); ++i) {
+      IntegerAttr num = numList[i].cast<IntegerAttr>();
+      if (num.getInt() < 0) {
+        std::string idx =
+            sdfg::utils::attributeToString(symNumList[-num.getInt() - 1], *op);
+        Range range(idx, idx, "1", "1");
+        accIn.addRange(range);
+      } else {
+        std::string idx =
+            sdfg::utils::valueToString(op.getOperand(num.getInt()));
+        Range range(idx, idx, "1", "1");
+        accIn.addRange(range);
+      }
+    }
+
+    Connector source = scope.lookup(op.getVal());
+    scope.routeWrite(source, accIn, op.getArr());
+    return success();
+  }
 
   Tasklet task(op.getLoc());
   task.setName("indirect_store" + name);
@@ -869,73 +863,65 @@ LogicalResult translation::collect(LoadOp &op, ScopeNode &scope) {
   ArrayAttr numList = op->getAttr("indices_numList").cast<ArrayAttr>();
   ArrayAttr symNumList = op->getAttr("indices").cast<ArrayAttr>();
 
-  // if (!op.isIndirect()) {
-  //   Connector connector = scope.lookup(op.getArr());
-  //   connector.setData(name);
+  if (!op.isIndirect()) {
+    Connector connector = scope.lookup(op.getArr());
+    connector.setData(name);
 
-  //   for (unsigned i = 0; i < numList.size(); ++i) {
-  //     IntegerAttr num = numList[i].cast<IntegerAttr>();
-  //     std::string idx =
-  //         sdfg::utils::attributeToString(symNumList[-num.getInt() - 1], *op);
-  //     Range range(idx, idx, "1", "1");
-  //     connector.addRange(range);
-  //   }
+    for (unsigned i = 0; i < numList.size(); ++i) {
+      IntegerAttr num = numList[i].cast<IntegerAttr>();
+      std::string idx =
+          sdfg::utils::attributeToString(symNumList[-num.getInt() - 1], *op);
+      Range range(idx, idx, "1", "1");
+      connector.addRange(range);
+    }
 
-  //   scope.mapConnector(op.getRes(), connector);
-  //   return success();
-  // }
+    scope.mapConnector(op.getRes(), connector);
+    return success();
+  }
 
-  // // If any of the operands comes from a non-map op
-  // bool dependsOnNonMap = false;
+  // If all the operands comes from a map op, thus symbol.
+  bool dependsPurelyOnMap = true;
 
-  // for (unsigned i = 0; i < numList.size(); ++i) {
-  //   IntegerAttr num = numList[i].cast<IntegerAttr>();
-  //   if (num.getInt() >= 0) {
-  //     if (BlockArgument bArg =
-  //             op.getOperand(num.getInt()).dyn_cast<BlockArgument>()) {
+  for (unsigned i = 0; i < numList.size(); ++i) {
+    IntegerAttr num = numList[i].cast<IntegerAttr>();
+    if (num.getInt() >= 0) {
+      if (BlockArgument bArg =
+              op.getOperand(num.getInt()).dyn_cast<BlockArgument>()) {
 
-  //       if (!isa<MapNode>(bArg.getParentRegion()->getParentOp())) {
-  //         dependsOnNonMap = true;
-  //       } else if (dependsOnNonMap) {
-  //         emitError(op.getLoc(),
-  //                   "Mixing of map-indices and non-map-indices not
-  //                   supported");
-  //         return failure();
-  //       }
+        if (!isa<MapNode>(bArg.getParentRegion()->getParentOp())) {
+          dependsPurelyOnMap = false;
+          break;
+        }
 
-  //     } else if (!dependsOnNonMap && i > 0) {
-  //       emitError(op.getLoc(),
-  //                 "Mixing of map-indices and non-map-indices not supported");
-  //       return failure();
-  //     } else {
-  //       dependsOnNonMap = true;
-  //     }
-  //   }
-  // }
+      } else {
+        dependsPurelyOnMap = false;
+        break;
+      }
+    }
+  }
 
-  // if (!dependsOnNonMap) {
-  //   Connector connector = scope.lookup(op.getArr());
-  //   connector.setData(name);
+  if (dependsPurelyOnMap) {
+    Connector connector = scope.lookup(op.getArr());
+    connector.setData(name);
 
-  //   for (unsigned i = 0; i < numList.size(); ++i) {
-  //     IntegerAttr num = numList[i].cast<IntegerAttr>();
-  //     if (num.getInt() < 0) {
-  //       std::string idx =
-  //           sdfg::utils::attributeToString(symNumList[-num.getInt() - 1],
-  //           *op);
-  //       Range range(idx, idx, "1", "1");
-  //       connector.addRange(range);
-  //     } else {
-  //       std::string idx =
-  //           sdfg::utils::valueToString(op.getOperand(num.getInt()));
-  //       Range range(idx, idx, "1", "1");
-  //       connector.addRange(range);
-  //     }
-  //   }
+    for (unsigned i = 0; i < numList.size(); ++i) {
+      IntegerAttr num = numList[i].cast<IntegerAttr>();
+      if (num.getInt() < 0) {
+        std::string idx =
+            sdfg::utils::attributeToString(symNumList[-num.getInt() - 1], *op);
+        Range range(idx, idx, "1", "1");
+        connector.addRange(range);
+      } else {
+        std::string idx =
+            sdfg::utils::valueToString(op.getOperand(num.getInt()));
+        Range range(idx, idx, "1", "1");
+        connector.addRange(range);
+      }
+    }
 
-  //   scope.mapConnector(op.getRes(), connector);
-  //   return success();
-  // }
+    scope.mapConnector(op.getRes(), connector);
+    return success();
+  }
 
   Tasklet task(op.getLoc());
   task.setName("indirect_load" + name);

@@ -808,6 +808,15 @@ public:
     type = NType::Access;
   }
 
+  Access(ConnectorNode n)
+      : ConnectorNode(n),
+        ptr(std::static_pointer_cast<AccessImpl>(ConnectorNode::ptr)) {
+    type = NType::Access;
+  }
+
+  /// Returns true if this access node should initialize.
+  bool getInit();
+
   /// Emits the access node to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
 };
@@ -820,6 +829,9 @@ private:
 public:
   AccessImpl(Location location, bool init)
       : ConnectorNodeImpl(location), init(init) {}
+
+  /// Returns true if this access node should initialize.
+  bool getInit();
 
   /// Emits the access node to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;

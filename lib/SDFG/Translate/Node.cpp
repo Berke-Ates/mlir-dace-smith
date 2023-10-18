@@ -931,8 +931,14 @@ void LibraryImpl::emit(emitter::JsonEmitter &jemit) {
 // Access
 //===----------------------------------------------------------------------===//
 
+/// Returns true if this access node should initialize.
+bool Access::getInit() { return ptr->getInit(); }
+
 /// Emits the access node to the output stream
 void Access::emit(emitter::JsonEmitter &jemit) { ptr->emit(jemit); }
+
+/// Returns true if this access node should initialize.
+bool AccessImpl::getInit() { return init; }
 
 /// Emits the access node to the output stream
 void AccessImpl::emit(emitter::JsonEmitter &jemit) {
@@ -1087,29 +1093,25 @@ void MapEntryImpl::routeOut(Connector from, Connector to, Value mapValue) {
 
 /// Adds a multiedge from the source to the destination connector.
 void MapEntryImpl::routeWrite(Connector from, Connector to, Value mapValue) {
-  Array array(sdfg::utils::generateName("tmp"), /*transient=*/true,
-              /*stream=*/false, /*init=*/false, mapValue.getType());
-  if (sdfg::utils::isSizedType(mapValue.getType()))
-    array = Array(sdfg::utils::generateName("tmp"), /*transient=*/true,
-                  /*stream=*/false, /*init=*/false,
-                  sdfg::utils::getSizedType(mapValue.getType()));
+  Access toAcc(to.parent);
 
-  parent.getSDFG().addArray(array);
-  Access access(location, false);
-  access.setName(array.name);
-  addNode(access);
+  Access access(location, toAcc.getInit());
+  access.setName(toAcc.getName());
 
   Connector accIn(access);
-  Connector accOut(access);
-
-  accIn.setData(array.name);
-  accOut.setData(array.name);
-
+  accIn.setData(to.data);
+  accIn.setRanges(to.ranges);
   access.addInConnector(accIn);
-  access.addOutConnector(accOut);
+
+  addNode(access);
   addEdge(MultiEdge(location, from, accIn));
+
+  Connector accOut(access);
+  accOut.setData(to.data);
+  access.addOutConnector(accOut);
   mapConnector(mapValue, accOut);
 
+  to.setRanges({});
   writeQueue.push_back(std::make_tuple(accOut, to, mapValue));
 }
 
