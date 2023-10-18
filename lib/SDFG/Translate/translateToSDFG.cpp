@@ -57,6 +57,32 @@ insertTransientArray(Location location, translation::Connector connector,
   return accOut;
 }
 
+/// Inserts a forwarding tasklet to enforce ordering for independent values.
+static translation::Connector
+insertTaskletForwarding(Location location, Value value,
+                        translation::Connector dep,
+                        translation::ScopeNode &scope) {
+  using namespace translation;
+
+  Tasklet tasklet(location);
+  tasklet.setName("Value_Forward");
+  tasklet.setCode(Code("valOut = valIn", CodeLanguage::Python));
+  scope.addNode(tasklet);
+
+  Connector taskIn(tasklet, "valIn");
+  tasklet.addInConnector(taskIn);
+  scope.addEdge(MultiEdge(location, scope.lookup(value), taskIn));
+
+  Connector taskDep(tasklet, "dep");
+  tasklet.addInConnector(taskDep);
+  scope.addEdge(MultiEdge(location, dep, taskDep));
+
+  Connector taskOut(tasklet, "valOut");
+  tasklet.addOutConnector(taskOut);
+
+  return insertTransientArray(location, taskOut, value, scope);
+}
+
 /// Collects a operation by performing a case distinction on the operation type.
 LogicalResult collectOperations(Operation &op, translation::ScopeNode &scope) {
   using namespace translation;
@@ -732,6 +758,7 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
   ArrayAttr numList = op->getAttr("indices_numList").cast<ArrayAttr>();
   ArrayAttr symNumList = op->getAttr("indices").cast<ArrayAttr>();
 
+  // Simple memlet for direct stores.
   if (!op.isIndirect()) {
     for (unsigned i = 0; i < numList.size(); ++i) {
       IntegerAttr num = numList[i].cast<IntegerAttr>();
@@ -741,7 +768,9 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
       accIn.addRange(range);
     }
 
-    Connector source = scope.lookup(op.getVal());
+    // Enforce ordering for independent values with tasklet indirection.
+    Connector source = insertTaskletForwarding(
+        op.getLoc(), op.getVal(), scope.lookup(op.getArr()), scope);
     scope.routeWrite(source, accIn, op.getArr());
     return success();
   }
@@ -783,7 +812,9 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
       }
     }
 
-    Connector source = scope.lookup(op.getVal());
+    // Enforce ordering for independent values with tasklet indirection.
+    Connector source = insertTaskletForwarding(
+        op.getLoc(), op.getVal(), scope.lookup(op.getArr()), scope);
     scope.routeWrite(source, accIn, op.getArr());
     return success();
   }
