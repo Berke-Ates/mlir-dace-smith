@@ -390,15 +390,20 @@ private:
   Connector source;
   /// Destination connector.
   Connector destination;
+  /// Ignore connectors. Just a dependency edge.
+  bool depEdge;
 
 public:
   MultiEdge(Location location, Connector source, Connector destination)
-      : location(location), source(source), destination(destination) {}
+      : location(location), source(source), destination(destination),
+        depEdge(false) {}
 
   /// Returns the source connector of this edge.
   Connector getSource();
   /// Returns the destination connector of this edge.
   Connector getDestination();
+  /// Makes this edge a dependency edge.
+  void makeDependence();
 
   /// Emits this edge to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
@@ -435,6 +440,8 @@ public:
   virtual void mapConnector(Value value, Connector connector);
   /// Returns the connector associated with a MLIR value.
   virtual Connector lookup(Value value);
+  /// Adds a dependency edge between the MLIR and the connector.
+  virtual void addDependency(Value value, Connector connector);
 
   /// Emits all nodes and edges to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
@@ -464,6 +471,8 @@ public:
   virtual void mapConnector(Value value, Connector connector);
   /// Returns the connector associated with a MLIR value.
   virtual Connector lookup(Value value);
+  /// Adds a dependency edge between the MLIR and the connector.
+  virtual void addDependency(Value value, Connector connector);
 
   /// Emits all nodes and edges to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
@@ -883,6 +892,8 @@ public:
   /// Returns the connector associated with a MLIR value, inserting map
   /// connectors when needed.
   Connector lookup(Value value) override;
+  /// Adds a dependency edge between the MLIR and the connector.
+  void addDependency(Value value, Connector connector) override;
 
   /// Emits the map entry to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
@@ -952,6 +963,8 @@ public:
   /// Returns the connector associated with a MLIR value, inserting map
   /// connectors when needed.
   Connector lookup(Value value) override;
+  /// Adds a dependency edge between the MLIR and the connector.
+  void addDependency(Value value, Connector connector) override;
 
   /// Emits the map entry to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;

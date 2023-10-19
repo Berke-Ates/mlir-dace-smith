@@ -306,6 +306,9 @@ Connector MultiEdge::getSource() { return source; }
 /// Returns the destination connector of this edge.
 Connector MultiEdge::getDestination() { return destination; }
 
+/// Makes this edge a dependency edge.
+void MultiEdge::makeDependence() { depEdge = true; }
+
 /// Emits this edge to the output stream.
 void MultiEdge::emit(emitter::JsonEmitter &jemit) {
   jemit.startObject();
@@ -314,11 +317,11 @@ void MultiEdge::emit(emitter::JsonEmitter &jemit) {
   jemit.printKVPair("src", source.parent.getID());
   jemit.printKVPair("dst", destination.parent.getID());
 
-  jemit.printKVPair("src_connector", source.name,
-                    /*stringify=*/!source.isNull);
+  jemit.printKVPair("src_connector", depEdge ? "null" : source.name,
+                    /*stringify=*/!source.isNull && !depEdge);
 
-  jemit.printKVPair("dst_connector", destination.name,
-                    /*stringify=*/!destination.isNull);
+  jemit.printKVPair("dst_connector", depEdge ? "null" : destination.name,
+                    /*stringify=*/!destination.isNull && !depEdge);
 
   jemit.startNamedObject("attributes");
   printLocation(location, jemit);
@@ -326,9 +329,9 @@ void MultiEdge::emit(emitter::JsonEmitter &jemit) {
   jemit.printKVPair("type", "Memlet");
   jemit.startNamedObject("attributes");
 
-  if (!source.data.empty()) {
+  if (!source.data.empty() && !depEdge) {
     jemit.printKVPair("data", source.data);
-  } else if (!destination.data.empty()) {
+  } else if (!destination.data.empty() && !depEdge) {
     jemit.printKVPair("data", destination.data);
   }
 
@@ -558,6 +561,15 @@ Connector ScopeNode::lookup(Value value) {
   return ptr->lookup(value);
 }
 
+/// Adds a dependency edge between the MLIR and the connector.
+void ScopeNode::addDependency(Value value, Connector connector) {
+  if (type == NType::MapEntry) {
+    return MapEntry(*this).addDependency(value, connector);
+  }
+
+  ptr->addDependency(value, connector);
+}
+
 /// Emits all nodes and edges to the output stream.
 void ScopeNode::emit(emitter::JsonEmitter &jemit) { ptr->emit(jemit); }
 
@@ -596,6 +608,13 @@ Connector ScopeNodeImpl::lookup(Value value) {
               "Tried to lookup nonexistent value in ScopeNodeImpl::lookup");
   }
   return lut.find(utils::valueToString(value))->second;
+}
+
+/// Adds a dependency edge between the MLIR and the connector.
+void ScopeNodeImpl::addDependency(Value value, Connector connector) {
+  MultiEdge edge(location, lookup(value), connector);
+  edge.makeDependence();
+  addEdge(edge);
 }
 
 /// Emits all nodes and edges to the output stream.
@@ -998,6 +1017,11 @@ void MapEntry::mapConnector(Value value, Connector connector) {
 /// connectors when needed.
 Connector MapEntry::lookup(Value value) { return ptr->lookup(value); }
 
+/// Adds a dependency edge between the MLIR and the connector.
+void MapEntry::addDependency(Value value, Connector connector) {
+  ptr->addDependency(value, connector);
+}
+
 /// Emits the map entry to the output stream.
 void MapEntry::emit(emitter::JsonEmitter &jemit) { ptr->emit(jemit); }
 
@@ -1155,6 +1179,29 @@ Connector MapEntryImpl::lookup(Value value) {
   return ScopeNodeImpl::lookup(value);
 }
 
+/// Adds a dependency edge between the MLIR and the connector.
+void MapEntryImpl::addDependency(Value value, Connector connector) {
+  if (lut.find(utils::valueToString(value)) == lut.end()) {
+    MapEntry entry(shared_from_this());
+    Connector mapIn(entry);
+    addInConnector(mapIn);
+    Connector mapOut(entry);
+    addOutConnector(mapOut);
+
+    MultiEdge edge(location, mapOut, connector);
+    edge.makeDependence();
+    addEdge(edge);
+
+    ScopeNode scope(parent);
+    scope.addDependency(value, mapIn);
+    return;
+  }
+
+  MultiEdge edge(location, lookup(value), connector);
+  edge.makeDependence();
+  addEdge(edge);
+}
+
 /// Emits the map entry to the output stream.
 void MapEntryImpl::emit(emitter::JsonEmitter &jemit) {
   jemit.startObject();
@@ -1273,7 +1320,7 @@ void ConsumeEntryImpl::addNode(ConnectorNode node) {
 /// Adds a multiedge from the source to the destination connector.
 void ConsumeEntryImpl::routeWrite(Connector from, Connector to,
                                   Value mapValue) {
-  // FIXME: Should be fixed like map entry
+  // FIXME: Should be fixed like map entry (including dependency routing)
   ConsumeExit consumeExit = getExit();
   Connector in(consumeExit,
                "IN_" + std::to_string(consumeExit.getInConnectorCount()));

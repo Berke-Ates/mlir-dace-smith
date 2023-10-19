@@ -57,30 +57,47 @@ insertTransientArray(Location location, translation::Connector connector,
   return accOut;
 }
 
-/// Inserts a forwarding tasklet to enforce ordering for independent values.
+/// Inserts a transient array with an dependency edge to enforce ordering.
 static translation::Connector
-insertTaskletForwarding(Location location, Value value,
-                        translation::Connector dep,
-                        translation::ScopeNode &scope) {
+insertDependencyArray(Location location, Value value, Value dep,
+                      translation::ScopeNode &scope) {
   using namespace translation;
+  return scope.lookup(value);
+  Array array(sdfg::utils::generateName("tmp"), /*transient=*/true,
+              /*stream=*/false, /*init=*/false, value.getType());
 
-  Tasklet tasklet(location);
-  tasklet.setName("Value_Forward");
-  tasklet.setCode(Code("valOut = valIn", CodeLanguage::Python));
-  scope.addNode(tasklet);
+  if (sdfg::utils::isSizedType(value.getType()))
+    array = Array(sdfg::utils::generateName("tmp"), /*transient=*/true,
+                  /*stream=*/false, /*init=*/false,
+                  sdfg::utils::getSizedType(value.getType()));
 
-  Connector taskIn(tasklet, "valIn");
-  tasklet.addInConnector(taskIn);
-  scope.addEdge(MultiEdge(location, scope.lookup(value), taskIn));
+  SDFG sdfg = scope.getSDFG();
+  sdfg.addArray(array);
 
-  Connector taskDep(tasklet, "dep");
-  tasklet.addInConnector(taskDep);
-  scope.addEdge(MultiEdge(location, dep, taskDep));
+  Access access(location, false);
+  access.setName(array.name);
+  scope.addNode(access);
 
-  Connector taskOut(tasklet, "valOut");
-  tasklet.addOutConnector(taskOut);
+  Connector valCon = scope.lookup(value);
+  Connector accIn(access);
+  accIn.setData(array.name);
+  accIn.setData(valCon.data);
+  accIn.setRanges(valCon.ranges);
+  access.addInConnector(accIn);
 
-  return insertTransientArray(location, taskOut, value, scope);
+  Connector accOut(access);
+  accOut.setData(valCon.data);
+  accOut.setRanges(valCon.ranges);
+  accOut.setData(array.name);
+  access.addOutConnector(accOut);
+
+  Connector accDep(access);
+  access.addInConnector(accDep);
+
+  scope.addDependency(dep, accDep);
+  scope.addEdge(MultiEdge(location, valCon, accIn));
+
+  return accOut;
 }
 
 /// Collects a operation by performing a case distinction on the operation type.
@@ -769,8 +786,8 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
     }
 
     // Enforce ordering for independent values with tasklet indirection.
-    Connector source = insertTaskletForwarding(
-        op.getLoc(), op.getVal(), scope.lookup(op.getArr()), scope);
+    Connector source =
+        insertDependencyArray(op.getLoc(), op.getVal(), op.getArr(), scope);
     scope.routeWrite(source, accIn, op.getArr());
     return success();
   }
@@ -813,8 +830,8 @@ LogicalResult translation::collect(StoreOp &op, ScopeNode &scope) {
     }
 
     // Enforce ordering for independent values with tasklet indirection.
-    Connector source = insertTaskletForwarding(
-        op.getLoc(), op.getVal(), scope.lookup(op.getArr()), scope);
+    Connector source =
+        insertDependencyArray(op.getLoc(), op.getVal(), op.getArr(), scope);
     scope.routeWrite(source, accIn, op.getArr());
     return success();
   }
