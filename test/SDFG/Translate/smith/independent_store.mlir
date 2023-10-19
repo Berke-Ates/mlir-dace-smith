@@ -3,7 +3,7 @@
 module {
   sdfg.sdfg {entry = @state_1} () -> (){
     %0 = sdfg.alloc {init} () : !sdfg.array<2xindex>
-        %1 = sdfg.alloc {init} () : !sdfg.array<2xindex>
+    %1 = sdfg.alloc {init} () : !sdfg.array<2xindex>
 
     sdfg.state @state_1{
       sdfg.map (%arg1) = (0) to (1) step (1){
