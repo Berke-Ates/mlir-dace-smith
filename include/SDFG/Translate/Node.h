@@ -1030,6 +1030,8 @@ public:
   /// Returns the connector associated with a MLIR value, inserting consume
   /// connectors when needed.
   Connector lookup(Value value) override;
+  /// Adds a dependency edge between the MLIR and the connector.
+  void addDependency(Value value, Connector connector) override;
 
   /// Sets the number of processing elements.
   void setNumPes(StringRef pes);
@@ -1096,6 +1098,8 @@ public:
   /// Returns the connector associated with a MLIR value, inserting consume
   /// connectors when needed.
   Connector lookup(Value value) override;
+  /// Adds a dependency edge between the MLIR and the connector.
+  void addDependency(Value value, Connector connector) override;
 
   /// Sets the number of processing elements.
   void setNumPes(StringRef pes);

@@ -62,7 +62,7 @@ static translation::Connector
 insertDependencyArray(Location location, Value value, Value dep,
                       translation::ScopeNode &scope) {
   using namespace translation;
-  return scope.lookup(value);
+
   Array array(sdfg::utils::generateName("tmp"), /*transient=*/true,
               /*stream=*/false, /*init=*/false, value.getType());
 
@@ -81,13 +81,9 @@ insertDependencyArray(Location location, Value value, Value dep,
   Connector valCon = scope.lookup(value);
   Connector accIn(access);
   accIn.setData(array.name);
-  accIn.setData(valCon.data);
-  accIn.setRanges(valCon.ranges);
   access.addInConnector(accIn);
 
   Connector accOut(access);
-  accOut.setData(valCon.data);
-  accOut.setRanges(valCon.ranges);
   accOut.setData(array.name);
   access.addOutConnector(accOut);
 

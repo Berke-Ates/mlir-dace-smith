@@ -567,6 +567,10 @@ void ScopeNode::addDependency(Value value, Connector connector) {
     return MapEntry(*this).addDependency(value, connector);
   }
 
+  if (type == NType::ConsumeEntry) {
+    return ConsumeEntry(*this).addDependency(value, connector);
+  }
+
   ptr->addDependency(value, connector);
 }
 
@@ -1291,6 +1295,11 @@ void ConsumeEntry::mapConnector(Value value, Connector connector) {
 /// connectors when needed.
 Connector ConsumeEntry::lookup(Value value) { return ptr->lookup(value); }
 
+/// Adds a dependency edge between the MLIR and the connector.
+void ConsumeEntry::addDependency(Value value, Connector connector) {
+  ptr->addDependency(value, connector);
+}
+
 /// Sets the number of processing elements.
 void ConsumeEntry::setNumPes(StringRef pes) { ptr->setNumPes(pes); }
 
@@ -1378,6 +1387,29 @@ Connector ConsumeEntryImpl::lookup(Value value) {
   }
 
   return ScopeNodeImpl::lookup(value);
+}
+
+/// Adds a dependency edge between the MLIR and the connector.
+void ConsumeEntryImpl::addDependency(Value value, Connector connector) {
+  if (lut.find(utils::valueToString(value)) == lut.end()) {
+    ConsumeEntry entry(shared_from_this());
+    Connector consIn(entry);
+    addInConnector(consIn);
+    Connector consOut(entry);
+    addOutConnector(consOut);
+
+    MultiEdge edge(location, consOut, connector);
+    edge.makeDependence();
+    addEdge(edge);
+
+    ScopeNode scope(parent);
+    scope.addDependency(value, consIn);
+    return;
+  }
+
+  MultiEdge edge(location, lookup(value), connector);
+  edge.makeDependence();
+  addEdge(edge);
 }
 
 /// Sets the number of processing elements.
