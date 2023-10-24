@@ -559,18 +559,33 @@ Operation *NestedSDFGNode::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   // Sample Arguments.
-  llvm::SmallVector<Type> argumentTypes =
-      builder.sampleTypes(0, [](const Type &t) { return t.isa<ArrayType>(); });
-  llvm::Optional<llvm::SmallVector<Value>> arguments =
-      builder.sampleValuesOfTypes(argumentTypes);
-  if (!arguments.has_value())
+  unsigned num_args = builder.sampleGeometric<unsigned>() + 1;
+  llvm::SmallVector<Value> arguments;
+  llvm::SmallVector<Type> argumentTypes;
+
+  for (unsigned i = 0; i < num_args; ++i) {
+    llvm::Optional<Value> value = builder.sampleValue([&](const Value &v) {
+      return v.getType().isa<ArrayType>() && !llvm::is_contained(arguments, v);
+    });
+
+    if (value.has_value()) {
+      arguments.push_back(value.value());
+      argumentTypes.push_back(value.value().getType());
+    } else {
+      num_args = i;
+      break;
+    }
+  }
+
+  // At least one argument.
+  if (num_args == 0)
     return nullptr;
 
   // Create NestedSDFGNode.
   OperationState state(builder.getUnknownLoc(),
                        NestedSDFGNode::getOperationName());
   NestedSDFGNode::build(builder, state, utils::generateID(), nullptr, 0,
-                        arguments.value());
+                        arguments);
   Operation *op = builder.create(state);
   if (!op)
     return nullptr;

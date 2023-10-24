@@ -493,6 +493,10 @@ LogicalResult translation::collect(LibCallOp &op, ScopeNode &scope) {
 LogicalResult translation::collect(NestedSDFGNode &op, ScopeNode &scope) {
   SDFG sdfg(op.getLoc());
 
+  llvm::SmallVector<Connector> args;
+  for (unsigned i = 0; i < op.getNumOperands(); ++i)
+    args.push_back(scope.lookup(op.getOperand(i)));
+
   if (collectSDFG(*op, sdfg).failed())
     return failure();
 
@@ -506,32 +510,41 @@ LogicalResult translation::collect(NestedSDFGNode &op, ScopeNode &scope) {
                                                    *op.getOperation()));
     nestedSDFG.addInConnector(connector);
 
-    MultiEdge edge(op.getLoc(), scope.lookup(op.getOperand(i)), connector);
+    MultiEdge edge(op.getLoc(), args[i], connector);
     scope.addEdge(edge);
   }
 
   for (unsigned i = op.getNumArgs(); i < op.getNumOperands(); ++i) {
-    Connector connector(nestedSDFG,
-                        sdfg::utils::valueToString(op.getBody().getArgument(i),
-                                                   *op.getOperation()));
+    Connector connIN(nestedSDFG,
+                     sdfg::utils::valueToString(op.getBody().getArgument(i),
+                                                *op.getOperation()));
+    Connector connOut(nestedSDFG,
+                      sdfg::utils::valueToString(op.getBody().getArgument(i),
+                                                 *op.getOperation()));
 
-    nestedSDFG.addOutConnector(connector);
-    nestedSDFG.addInConnector(connector);
+    nestedSDFG.addInConnector(connIN);
+    nestedSDFG.addOutConnector(connOut);
 
-    MultiEdge edge_in(op.getLoc(), scope.lookup(op.getOperand(i)), connector);
+    MultiEdge edge_in(op.getLoc(), args[i], connIN);
     scope.addEdge(edge_in);
 
-    std::string arrName = sdfg::utils::valueToString(op.getOperand(i));
-    if (op.getOperand(i).getDefiningOp() != nullptr)
-      arrName = cast<AllocOp>(op.getOperand(i).getDefiningOp())
-                    .getName()
-                    .value_or(arrName);
+    std::string name = sdfg::utils::valueToString(op.getOperand(i));
+    bool init = false;
 
-    Connector accOut = scope.lookup(op.getOperand(i));
-    MultiEdge edge_out(op.getLoc(), connector, accOut);
-    scope.addEdge(edge_out);
+    if (op.getOperand(i).getDefiningOp() != nullptr) {
+      AllocOp allocOp = cast<AllocOp>(op.getOperand(i).getDefiningOp());
+      name = allocOp.getName().value_or(name);
+      init = allocOp->hasAttr("init");
+    }
 
-    scope.mapConnector(op.getOperand(i), accOut);
+    Access access(op.getLoc(), init);
+    access.setName(name);
+
+    Connector accIn(access);
+    accIn.setData(name);
+    access.addInConnector(accIn);
+
+    scope.routeWrite(connOut, accIn, op.getOperand(i));
   }
 
   return success();
