@@ -713,6 +713,10 @@ LogicalResult StateNode::verify() {
   return success();
 }
 
+void StateNode::registerConfigs(GeneratorOpBuilder::Config &config) {
+  (void)config.registerConfig<unsigned>("sdfg.single_state", 0);
+}
+
 Operation *StateNode::generate(GeneratorOpBuilder &builder) {
   Block *block = builder.getBlock();
   if (!block)
@@ -721,6 +725,11 @@ Operation *StateNode::generate(GeneratorOpBuilder &builder) {
   Operation *parent = block->getParentOp();
   if (!parent || !(isa<SDFGNode>(parent) || isa<NestedSDFGNode>(parent)))
     return nullptr;
+
+  if (SDFGNode sdfg = dyn_cast<SDFGNode>(parent))
+    if (sdfg.getEntry().has_value() &&
+        builder.config.get<unsigned>("sdfg.single_state"))
+      return nullptr;
 
   OperationState state(builder.getUnknownLoc(), getOperationName());
   build(builder, state, utils::generateID(), utils::generateName("state"));
@@ -1323,6 +1332,11 @@ Operation *EdgeOp::generate(GeneratorOpBuilder &builder) {
   Operation *parent = block->getParentOp();
   if (!parent || !(isa<SDFGNode>(parent) || isa<NestedSDFGNode>(parent)))
     return nullptr;
+
+  if (SDFGNode sdfg = dyn_cast<SDFGNode>(parent))
+    if (sdfg.getEntry().has_value() &&
+        builder.config.get<unsigned>("sdfg.single_state"))
+      return nullptr;
 
   llvm::SmallVector<llvm::StringRef> usedSymbols;
   for (EdgeOp edge : parent->getRegion(0).getOps<EdgeOp>())

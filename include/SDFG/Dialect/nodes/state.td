@@ -12,7 +12,7 @@ def SDFG_StateNode : SDFG_Op<"state", [
     NoTerminator,
     SymbolTable,
     Symbol,
-    DeclareOpInterfaceMethods<GeneratableOpInterface>
+    DeclareOpInterfaceMethods<GeneratableOpInterface, ["registerConfigs"]>
 ]> {
     let summary = "State region";
     let description = [{
