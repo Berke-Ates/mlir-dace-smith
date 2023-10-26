@@ -12,7 +12,7 @@ def SDFG_SDFGNode : SDFG_Op<"sdfg", [
     IsolatedFromAbove,
     SymbolTable,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<GeneratableOpInterface>
+    DeclareOpInterfaceMethods<GeneratableOpInterface, ["registerConfigs"]>
 ]> {
     let summary = "SDFG region";
     let description = [{

@@ -341,6 +341,14 @@ LogicalResult SDFGNode::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+void SDFGNode::registerConfigs(GeneratorOpBuilder::Config &config) {
+  for (RegisteredOperationName ron :
+       config.getContext()->getRegisteredOperations())
+    if (ron.hasInterface<GeneratableOpInterface>() &&
+        ron.getDialectNamespace() != SDFGDialect::getDialectNamespace())
+      (void)config.set<int>(ron.getStringRef().str(), 0);
+}
+
 Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
   Block *block = builder.getBlock();
   if (!block)
