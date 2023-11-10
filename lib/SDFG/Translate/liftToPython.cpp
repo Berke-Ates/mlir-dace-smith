@@ -548,7 +548,7 @@ Optional<std::string> liftOperationToPython(Operation &op, Operation &source) {
     std::string x = sdfg::utils::valueToString(fmaOp.getOperand(0), op);
     std::string y = sdfg::utils::valueToString(fmaOp.getOperand(1), op);
     std::string z = sdfg::utils::valueToString(fmaOp.getOperand(2), op);
-    return nameOut + " = math.fma(" + x + ", " + y + ", " + z + ")";
+    return nameOut + " =  " + x + " + " + y + " * " + z + ")";
   }
 
   if (math::FloorOp floorOp = dyn_cast<math::FloorOp>(op)) {
