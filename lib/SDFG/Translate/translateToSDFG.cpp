@@ -419,6 +419,15 @@ LogicalResult translation::collect(TaskletNode &op, ScopeNode &scope) {
     } else if (operation == "exit") {
       Code code("sys.exit()", CodeLanguage::Python);
       tasklet.setCode(code);
+    } else if (operation == "xor") {
+      std::string codeString = "";
+      std::string xorString = "0";
+      for (unsigned i = 0; i < op.getNumOperands(); ++i)
+        xorString += " ^ int(" + op.getInputName(i) + ")";
+      for (unsigned i = 0; i < op.getNumResults(); ++i)
+        codeString += op.getOutputName(i) + " = " + xorString + "\\n";
+      Code code(codeString, CodeLanguage::Python);
+      tasklet.setCode(code);
     } else {
       // TODO: Support inputs & outputs
       if (tasklet.getOutConnectorCount() > 0) {

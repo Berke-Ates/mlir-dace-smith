@@ -131,9 +131,15 @@ void ArrayType::print(::mlir::AsmPrinter &odsPrinter) const {
 
 Type ArrayType::generate(GeneratorOpBuilder &builder) {
   llvm::SmallVector<Type> possibleTypes = {
-      builder.getIndexType(), builder.getI1Type(),  builder.getI8Type(),
-      builder.getI16Type(),   builder.getI32Type(), builder.getI64Type(),
-      builder.getF16Type(),   builder.getF32Type(), builder.getF64Type(),
+      builder.getIndexType(),
+      builder.getI1Type(),
+      builder.getI8Type(),
+      builder.getI16Type(),
+      builder.getI32Type(),
+      builder.getI64Type(),
+      // builder.getF16Type(),
+      builder.getF32Type(),
+      builder.getF64Type(),
   };
 
   Type elemType = builder.sample(possibleTypes).value();
