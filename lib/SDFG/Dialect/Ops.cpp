@@ -836,6 +836,10 @@ LogicalResult TaskletNode::verify() {
   return success();
 }
 
+void TaskletNode::registerConfigs(GeneratorOpBuilder::Config &config) {
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_xor", 0);
+}
+
 Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
   Block *block = builder.getBlock();
   if (!block)
@@ -867,6 +871,9 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
       builder.createBlock(&taskletNode.getBody(), {}, argumentTypes,
                           builder.getUnknownLocs(argumentTypes.size()));
   builder.setInsertionPointToEnd(body);
+
+  if (builder.config.get<unsigned>("sdfg.tasklet_xor") != 0)
+    taskletNode->setAttr("insert_code", builder.getStringAttr("xor"));
 
   // FIXME: This could be useful in the GeneratorOpBuilder
   //-----

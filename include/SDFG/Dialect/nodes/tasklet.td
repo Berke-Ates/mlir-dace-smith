@@ -11,7 +11,7 @@ def SDFG_TaskletNode : SDFG_Op<"tasklet", [
     AffineScope, 
     AutomaticAllocationScope, 
     IsolatedFromAbove,
-    DeclareOpInterfaceMethods<GeneratableOpInterface>
+    DeclareOpInterfaceMethods<GeneratableOpInterface, ["registerConfigs"]>
 ]> {
     let summary = "Tasklet";
     let description = [{
