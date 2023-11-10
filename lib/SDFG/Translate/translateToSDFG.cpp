@@ -401,6 +401,7 @@ LogicalResult translation::collect(TaskletNode &op, ScopeNode &scope) {
       Connector accOut =
           insertTransientArray(op.getLoc(), connector, op.getResult(i), scope);
       outputNameMap.try_emplace(name, accOut);
+      outputNames.push_back(name);
     } else {
       scope.mapConnector(op.getResult(i), outputNameMap.find(name)->second);
     }
@@ -420,12 +421,14 @@ LogicalResult translation::collect(TaskletNode &op, ScopeNode &scope) {
       Code code("sys.exit()", CodeLanguage::Python);
       tasklet.setCode(code);
     } else if (operation == "xor") {
-      std::string codeString = "";
-      std::string xorString = "0";
+      std::string xorString = "__xor = 0";
       for (unsigned i = 0; i < op.getNumOperands(); ++i)
         xorString += " ^ int(" + op.getInputName(i) + ")";
-      for (unsigned i = 0; i < op.getNumResults(); ++i)
-        codeString += op.getOutputName(i) + " = " + xorString + "\\n";
+
+      std::string codeString = xorString + "\\n";
+      for (std::string name : outputNames)
+        codeString += name + " = __xor\\n";
+
       Code code(codeString, CodeLanguage::Python);
       tasklet.setCode(code);
     } else {
