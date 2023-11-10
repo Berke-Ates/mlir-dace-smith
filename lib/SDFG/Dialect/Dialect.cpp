@@ -140,9 +140,11 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
   llvm::SmallVector<int64_t> integers;
   llvm::SmallVector<bool> shape;
 
-  unsigned length = builder.sampleGeometric<unsigned>();
+  unsigned length = builder.sampleUniform<unsigned>(0, 4);
   for (unsigned i = 0; i < length; ++i) {
-    integers.push_back(builder.sampleGeometric<int64_t>() + 1);
+    int64_t value = builder.sampleGeometric<int64_t>() + 1;
+    value = value > 64 ? 64 : value;
+    integers.push_back(value);
     shape.push_back(true);
   }
 
