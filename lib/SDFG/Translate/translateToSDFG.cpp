@@ -547,6 +547,7 @@ LogicalResult translation::collect(NestedSDFGNode &op, ScopeNode &scope) {
     scope.routeWrite(connOut, accIn, op.getOperand(i));
   }
 
+  sdfg.setNestedTransient();
   return success();
 }
 

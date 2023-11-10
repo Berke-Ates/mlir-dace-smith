@@ -662,6 +662,9 @@ void SDFG::addSymbol(Symbol symbol) { ptr->addSymbol(symbol); }
 /// Returns an array of all symbols in the SDFG.
 std::vector<Symbol> SDFG::getSymbols() { return ptr->getSymbols(); }
 
+/// Sets all non-argument arrays to transient.
+void SDFG::setNestedTransient() { ptr->setNestedTransient(); }
+
 /// Emits the SDFG to the output stream.
 void SDFG::emit(emitter::JsonEmitter &jemit) { ptr->emit(jemit); };
 
@@ -711,6 +714,13 @@ void SDFGImpl::addSymbol(Symbol symbol) { symbols.push_back(symbol); }
 
 /// Returns an array of all symbols in the SDFG.
 std::vector<Symbol> SDFGImpl::getSymbols() { return symbols; }
+
+/// Sets all non-argument arrays to transient.
+void SDFGImpl::setNestedTransient() {
+  for (Array &a : arrays)
+    if (!llvm::is_contained(args, a))
+      a.transient = true;
+}
 
 /// Emits the SDFG to the output stream.
 void SDFGImpl::emit(emitter::JsonEmitter &jemit) {

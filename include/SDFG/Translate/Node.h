@@ -164,6 +164,8 @@ public:
       : name(name), transient(transient), stream(stream), init(init),
         shape(shape) {}
 
+  bool operator==(const Array other) const { return other.name == name; }
+
   /// Emits this array to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
 };
@@ -566,6 +568,9 @@ public:
   /// Returns an array of all symbols in the SDFG.
   std::vector<Symbol> getSymbols();
 
+  /// Sets all non-argument arrays to transient.
+  void setNestedTransient();
+
   /// Emits the SDFG to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
   /// Emits the SDFG as a nested SDFG to the output stream.
@@ -616,6 +621,9 @@ public:
   void addSymbol(Symbol symbol);
   /// Returns an array of all symbols in the SDFG.
   std::vector<Symbol> getSymbols();
+
+  /// Sets all non-argument arrays to transient.
+  void setNestedTransient();
 
   /// Emits the SDFG to the output stream.
   void emit(emitter::JsonEmitter &jemit) override;
