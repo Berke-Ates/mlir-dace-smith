@@ -722,7 +722,7 @@ LogicalResult StateNode::verify() {
 }
 
 void StateNode::registerConfigs(GeneratorOpBuilder::Config &config) {
-  (void)config.registerConfig<unsigned>("sdfg.single_state", 0);
+  (void)config.registerConfig<unsigned>("sdfg.single_state", 1);
 }
 
 Operation *StateNode::generate(GeneratorOpBuilder &builder) {
@@ -735,6 +735,11 @@ Operation *StateNode::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   if (SDFGNode sdfg = dyn_cast<SDFGNode>(parent))
+    if (sdfg.getEntry().has_value() &&
+        builder.config.get<unsigned>("sdfg.single_state"))
+      return nullptr;
+
+  if (NestedSDFGNode sdfg = dyn_cast<NestedSDFGNode>(parent))
     if (sdfg.getEntry().has_value() &&
         builder.config.get<unsigned>("sdfg.single_state"))
       return nullptr;
@@ -837,7 +842,7 @@ LogicalResult TaskletNode::verify() {
 }
 
 void TaskletNode::registerConfigs(GeneratorOpBuilder::Config &config) {
-  (void)config.registerConfig<unsigned>("sdfg.tasklet_xor", 0);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_xor", 1);
 }
 
 Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
@@ -1349,6 +1354,11 @@ Operation *EdgeOp::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   if (SDFGNode sdfg = dyn_cast<SDFGNode>(parent))
+    if (sdfg.getEntry().has_value() &&
+        builder.config.get<unsigned>("sdfg.single_state"))
+      return nullptr;
+
+  if (NestedSDFGNode sdfg = dyn_cast<NestedSDFGNode>(parent))
     if (sdfg.getEntry().has_value() &&
         builder.config.get<unsigned>("sdfg.single_state"))
       return nullptr;
