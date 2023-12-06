@@ -142,11 +142,19 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
       builder.getF64Type(),
   };
 
+  if (builder.config.get<unsigned>("sdfg.scientific"))
+    possibleTypes = {builder.getI32Type(), builder.getI64Type(),
+                     builder.getF32Type(), builder.getF64Type()};
+
   Type elemType = builder.sample(possibleTypes).value();
   llvm::SmallVector<int64_t> integers;
   llvm::SmallVector<bool> shape;
 
   unsigned length = builder.sampleUniform<unsigned>(0, 4);
+
+  if (builder.config.get<unsigned>("sdfg.scientific"))
+    length = builder.sampleUniform<unsigned>(2, 3);
+
   for (unsigned i = 0; i < length; ++i) {
     int64_t value = builder.sampleGeometric<int64_t>() + 1;
     value = value > 64 ? 64 : value;
