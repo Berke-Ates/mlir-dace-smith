@@ -157,7 +157,12 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
 
   for (unsigned i = 0; i < length; ++i) {
     int64_t value = builder.sampleGeometric<int64_t>() + 1;
-    value = value > 64 ? 64 : value;
+    unsigned limit =
+        builder.config
+            .get<unsigned>("sdfg.array_dim" + std::to_string(i) + "_limit")
+            .value();
+
+    value = value > limit ? limit : value;
     integers.push_back(value);
     shape.push_back(true);
   }

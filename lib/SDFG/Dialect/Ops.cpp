@@ -349,6 +349,10 @@ void SDFGNode::registerConfigs(GeneratorOpBuilder::Config &config) {
       (void)config.set<int>(ron.getStringRef().str(), 0);
 
   (void)config.registerConfig<unsigned>("sdfg.scientific", 0);
+
+  for (unsigned i = 0; i < 4; ++i)
+    (void)config.registerConfig<unsigned>(
+        "sdfg.array_dim" + std::to_string(i) + "_limit", 64);
 }
 
 Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
