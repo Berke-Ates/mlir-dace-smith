@@ -852,6 +852,20 @@ LogicalResult TaskletNode::verify() {
 
 void TaskletNode::registerConfigs(GeneratorOpBuilder::Config &config) {
   (void)config.registerConfig<unsigned>("sdfg.tasklet_xor", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.addi", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.addf", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.subi", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.subf", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.muli", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.mulf", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.divui", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.divsi", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.divf", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_arith.constant",
+                                        1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_math.fpowi", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_math.ipowi", 1);
+  (void)config.registerConfig<unsigned>("sdfg.tasklet_weight_math.powf", 1);
 }
 
 Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
@@ -894,18 +908,26 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
   // FIXME: This could be useful in the GeneratorOpBuilder
   //-----
   llvm::SmallVector<mlir::RegisteredOperationName> possibleOps;
+  llvm::SmallVector<unsigned> opsProbabilities = {};
   llvm::SmallVector<std::string> scientificOps = {
-      "arith.addi", "arith.addf",    "arith.subi",  "arith.subf",
-      "arith.muli", "arith.mulf",    "arith.divui", "arith.divsi",
-      "arith.divf", "arith.constant"};
+      "arith.addi", "arith.addf",     "arith.subi",  "arith.subf",
+      "arith.muli", "arith.mulf",     "arith.divui", "arith.divsi",
+      "arith.divf", "arith.constant", "math.fpowi",  "math.ipowi",
+      "math.powf"};
   for (RegisteredOperationName ron :
        builder.getContext()->getRegisteredOperations())
     if (ron.hasInterface<GeneratableOpInterface>() &&
         (ron.getDialectNamespace() == "arith" ||
          ron.getDialectNamespace() == "math"))
       if (!builder.config.get<unsigned>("sdfg.scientific") ||
-          llvm::is_contained(scientificOps, ron.getStringRef().str()))
+          llvm::is_contained(scientificOps, ron.getStringRef().str())) {
         possibleOps.push_back(ron);
+        unsigned prob = builder.config
+                            .get<unsigned>("sdfg.tasklet_weight_" +
+                                           ron.getStringRef().str())
+                            .value_or(1);
+        opsProbabilities.push_back(prob);
+      }
 
   while (!possibleOps.empty()) {
     llvm::Optional<RegisteredOperationName> sampledOp =
