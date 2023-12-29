@@ -142,7 +142,7 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
       builder.getF64Type(),
   };
 
-  if (builder.config.get<unsigned>("sdfg.scientific"))
+  if (builder.config.get<unsigned>("sdfg.scientific").value())
     possibleTypes = {builder.getI32Type(), builder.getI64Type(),
                      builder.getF32Type(), builder.getF64Type()};
 
@@ -152,7 +152,7 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
 
   unsigned length = builder.sampleUniform<unsigned>(0, 4);
 
-  if (builder.config.get<unsigned>("sdfg.scientific"))
+  if (builder.config.get<unsigned>("sdfg.scientific").value())
     length = builder.sampleUniform<unsigned>(2, 3);
 
   for (unsigned i = 0; i < length; ++i) {
@@ -160,7 +160,7 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
     unsigned limit =
         builder.config
             .get<unsigned>("sdfg.array_dim" + std::to_string(i) + "_limit")
-            .value();
+            .value_or(64);
 
     value = value > limit ? limit : value;
     integers.push_back(value);

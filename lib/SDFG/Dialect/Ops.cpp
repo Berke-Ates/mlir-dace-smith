@@ -350,7 +350,7 @@ void SDFGNode::registerConfigs(GeneratorOpBuilder::Config &config) {
 
   (void)config.registerConfig<unsigned>("sdfg.scientific", 0);
 
-  for (unsigned i = 0; i < 4; ++i)
+  for (unsigned i = 0; i < 3; ++i)
     (void)config.registerConfig<unsigned>(
         "sdfg.array_dim" + std::to_string(i) + "_limit", 64);
 }
@@ -373,20 +373,36 @@ Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
   SDFGNode sdfgNode = cast<SDFGNode>(op);
   Block *body = builder.createBlock(&sdfgNode.getBody());
 
+  // Generate global allocations.
+  unsigned length = builder.sampleGeometric<unsigned>() + 1;
+  llvm::SmallVector<Operation *> allocations;
+  for (unsigned i = 0; i < length; ++i) {
+    Operation *op = AllocOp::generate(builder);
+    if (!op)
+      break;
+    allocations.push_back(op);
+  }
+
   // Ensure entry state.
   Operation *entryStateOp = StateNode::generate(builder);
-  if (!entryStateOp) {
-    sdfgNode.erase();
-    return nullptr;
+  while (!entryStateOp) {
+    allocations.back()->erase();
+    allocations.pop_back();
+    entryStateOp = StateNode::generate(builder);
+    if (allocations.empty() && !entryStateOp)
+      return nullptr;
   }
 
   StateNode entryState = cast<StateNode>(entryStateOp);
   sdfgNode.setEntry(entryState.getName());
 
-  if (builder.generateBlock(body).failed()) {
-    sdfgNode.erase();
-    return nullptr;
-  }
+  // Generate additional states and edges.
+  length = builder.sampleGeometric<unsigned>();
+  for (unsigned i = 0; i < length; ++i)
+    if (builder.sampleBool())
+      StateNode::generate(builder);
+    else
+      EdgeOp::generate(builder);
 
   // Add arguments.
   builder.setInsertionPointToEnd(body);
@@ -405,6 +421,7 @@ Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
     BlockArgument bArg =
         body->addArgument(v.getType(), builder.getUnknownLoc());
     v.replaceAllUsesWith(bArg);
+    v.getDefiningOp()->erase();
   }
 
   return sdfgNode;
@@ -563,7 +580,7 @@ NestedSDFGNode::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 Operation *NestedSDFGNode::generate(GeneratorOpBuilder &builder) {
-  if (builder.config.get<unsigned>("sdfg.scientific"))
+  if (builder.config.get<unsigned>("sdfg.scientific").value())
     return nullptr;
 
   Block *block = builder.getBlock();
@@ -745,12 +762,12 @@ Operation *StateNode::generate(GeneratorOpBuilder &builder) {
 
   if (SDFGNode sdfg = dyn_cast<SDFGNode>(parent))
     if (sdfg.getEntry().has_value() &&
-        builder.config.get<unsigned>("sdfg.single_state"))
+        builder.config.get<unsigned>("sdfg.single_state").value())
       return nullptr;
 
   if (NestedSDFGNode sdfg = dyn_cast<NestedSDFGNode>(parent))
     if (sdfg.getEntry().has_value() &&
-        builder.config.get<unsigned>("sdfg.single_state"))
+        builder.config.get<unsigned>("sdfg.single_state").value())
       return nullptr;
 
   OperationState state(builder.getUnknownLoc(), getOperationName());
@@ -887,7 +904,8 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
   llvm::Optional<llvm::SmallVector<Value>> arguments =
       builder.sampleValuesOfTypes(
           argumentTypes,
-          /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific"));
+          /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific")
+              .value());
   if (!arguments.has_value())
     return nullptr;
 
@@ -902,7 +920,7 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
                           builder.getUnknownLocs(argumentTypes.size()));
   builder.setInsertionPointToEnd(body);
 
-  if (builder.config.get<unsigned>("sdfg.tasklet_xor") != 0)
+  if (builder.config.get<unsigned>("sdfg.tasklet_xor").value())
     taskletNode->setAttr("insert_code", builder.getStringAttr("xor"));
 
   // FIXME: This could be useful in the GeneratorOpBuilder
@@ -919,7 +937,7 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
     if (ron.hasInterface<GeneratableOpInterface>() &&
         (ron.getDialectNamespace() == "arith" ||
          ron.getDialectNamespace() == "math"))
-      if (!builder.config.get<unsigned>("sdfg.scientific") ||
+      if (!builder.config.get<unsigned>("sdfg.scientific").value() ||
           llvm::is_contained(scientificOps, ron.getStringRef().str())) {
         possibleOps.push_back(ron);
         unsigned prob = builder.config
@@ -1080,6 +1098,84 @@ LogicalResult MapNode::verify() {
 /// Returns the body of the map node.
 Region &MapNode::getLoopBody() { return getBody(); }
 
+/// Affine MapNodes.
+Operation *generateAffineMapNode(GeneratorOpBuilder &builder) {
+  // Select array and dimension
+  // Check outer maps for already present dimensions
+  // Try for every array and dimension
+  // Arrays are guaranteed to be 2D or 3D and statically sized
+  // Some sizes may overlap
+  // Load and store operations should use map values as dynamic indices in
+  // scientific mode Otherwise they should use static indices
+  // Empty maps are pointless => delete in retrospect
+
+  // All available array types.
+  llvm::SmallVector<Type> types =
+      builder.collectTypes([](const Type &t) { return t.isa<ArrayType>(); });
+
+  // Reducing to dimensions multiset.
+  // As the same dimension size can appear in multiple dimensions.
+  // We map the dimension size to the number of times it appears at most (max
+  // 3).
+  llvm::DenseMap<unsigned, unsigned> dimNums;
+
+  for (Type t : types) {
+    llvm::DenseMap<unsigned, unsigned> dimNumsT;
+    for (int64_t dim : t.cast<ArrayType>().getIntegers())
+      dimNumsT[dim]++;
+    for (const auto &[dim, cnt] : dimNumsT)
+      dimNums[dim] = dimNums[dim] > cnt ? dimNums[dim] : cnt;
+  }
+
+  // Remove already covered dimensions
+  Operation *parent = builder.getBlock()->getParentOp();
+  while (isa<MapNode>(parent)) {
+    MapNode parentMap = cast<MapNode>(parent);
+    llvm::APInt dim =
+        parentMap.getUpperBounds()[0].cast<IntegerAttr>().getValue();
+    if (--dimNums[dim.getZExtValue()] <= 0)
+      dimNums.erase(dim.getZExtValue());
+    parent = parentMap->getParentOp();
+  }
+
+  // If all dimensions covered, abort.
+  if (dimNums.empty())
+    return nullptr;
+
+  // Randomly pick a dimension and create a map iterating over it.
+  llvm::SmallVector<unsigned> possibleDims;
+  for (const auto &[dim, cnt] : dimNums)
+    possibleDims.push_back(dim);
+  unsigned dim = builder.sample(possibleDims).value();
+
+  OperationState state(builder.getUnknownLoc(), MapNode::getOperationName());
+
+  ArrayAttr numList = builder.getArrayAttr({builder.getI32IntegerAttr(-1)});
+  state.addAttribute("lowerBounds_numList", numList);
+  state.addAttribute("upperBounds_numList", numList);
+  state.addAttribute("steps_numList", numList);
+
+  MapNode::build(builder, state, sdfg::utils::generateID(),
+                 sdfg::utils::generateID(), {},
+                 builder.getArrayAttr({builder.getIndexAttr(0)}),
+                 builder.getArrayAttr({builder.getIndexAttr(dim)}),
+                 builder.getArrayAttr({builder.getIndexAttr(1)}));
+  Operation *op = builder.create(state);
+  if (!op)
+    return nullptr;
+
+  MapNode mapNode = cast<MapNode>(op);
+  Block *body =
+      builder.createBlock(&mapNode.getBody(), {}, {builder.getIndexType()},
+                          builder.getUnknownLocs(1));
+  if (builder.generateBlock(body).failed() /*|| body->empty()*/) {
+    mapNode.erase();
+    return nullptr;
+  }
+
+  return op;
+}
+
 Operation *MapNode::generate(GeneratorOpBuilder &builder) {
   Block *block = builder.getBlock();
   if (!block)
@@ -1090,10 +1186,12 @@ Operation *MapNode::generate(GeneratorOpBuilder &builder) {
                    isa<ConsumeNode>(parent)))
     return nullptr;
 
+  // Scientific version.
+  if (builder.config.get<unsigned>("sdfg.scientific").value())
+    return generateAffineMapNode(builder);
+
   // Determine number of parameters.
   unsigned num_params = builder.sampleGeometric<unsigned>() + 1;
-  if (builder.config.get<unsigned>("sdfg.scientific"))
-    num_params = 1;
 
   // List of values and argument types.
   llvm::SmallVector<Value> operands;
@@ -1105,12 +1203,6 @@ Operation *MapNode::generate(GeneratorOpBuilder &builder) {
   SmallVector<Attribute> lb_attrList;
   SmallVector<Attribute> lb_numList;
   for (unsigned i = 0; i < num_params; ++i) {
-    if (builder.config.get<unsigned>("sdfg.scientific")) {
-      lb_numList.push_back(builder.getI32IntegerAttr(-i - 1));
-      lb_attrList.push_back(builder.getIndexAttr(1));
-      continue;
-    }
-
     lb_numList.push_back(builder.getI32IntegerAttr(operands.size()));
     llvm::Optional<Value> val =
         builder.sampleValueOfType(builder.getIndexType());
@@ -1403,15 +1495,8 @@ Operation *EdgeOp::generate(GeneratorOpBuilder &builder) {
   if (!parent || !(isa<SDFGNode>(parent) || isa<NestedSDFGNode>(parent)))
     return nullptr;
 
-  if (SDFGNode sdfg = dyn_cast<SDFGNode>(parent))
-    if (sdfg.getEntry().has_value() &&
-        builder.config.get<unsigned>("sdfg.single_state"))
-      return nullptr;
-
-  if (NestedSDFGNode sdfg = dyn_cast<NestedSDFGNode>(parent))
-    if (sdfg.getEntry().has_value() &&
-        builder.config.get<unsigned>("sdfg.single_state"))
-      return nullptr;
+  if (builder.config.get<unsigned>("sdfg.single_state").value())
+    return nullptr;
 
   llvm::SmallVector<llvm::StringRef> usedSymbols;
   for (EdgeOp edge : parent->getRegion(0).getOps<EdgeOp>())
@@ -1690,6 +1775,53 @@ LogicalResult LoadOp::verify() {
   return success();
 }
 
+// Affine LoadOps.
+Operation *generateAffineLoadOp(GeneratorOpBuilder &builder) {
+  // Count maps upper bounds.
+  llvm::DenseMap<unsigned, llvm::SmallVector<Value>> dimNums;
+  Operation *parent = builder.getBlock()->getParentOp();
+  while (isa<MapNode>(parent)) {
+    MapNode parentMap = cast<MapNode>(parent);
+    llvm::APInt dim =
+        parentMap.getUpperBounds()[0].cast<IntegerAttr>().getValue();
+    dimNums[dim.getZExtValue()].push_back(parentMap.getBody().getArgument(0));
+    parent = parentMap->getParentOp();
+  }
+
+  // Sample a fitting array.
+  llvm::Optional<Value> array = builder.sampleValue([&](const Value &v) {
+    if (!v.getType().isa<ArrayType>())
+      return false;
+
+    for (int64_t dim : v.getType().cast<ArrayType>().getIntegers())
+      if (dimNums[dim].empty())
+        return false;
+
+    return true;
+  });
+
+  if (!array.has_value())
+    return nullptr;
+  Value arrayValue = array.value();
+  ArrayType arrayType = arrayValue.getType().cast<ArrayType>();
+
+  // Sample maps.
+  llvm::SmallVector<Value> indices;
+  SmallVector<Attribute> numList;
+  for (int64_t dim : arrayType.getIntegers()) {
+    indices.push_back(builder.sample(dimNums[dim]).value());
+    numList.push_back(builder.getI32IntegerAttr(numList.size()));
+  }
+
+  // Create LoadOp.
+  OperationState state(builder.getUnknownLoc(), LoadOp::getOperationName());
+  state.addAttribute("indices", builder.getArrayAttr({}));
+  state.addAttribute("indices_numList", builder.getArrayAttr(numList));
+  LoadOp::build(builder, state, arrayType.getElementType(), indices,
+                arrayValue);
+  return builder.create(state);
+}
+
 Operation *LoadOp::generate(GeneratorOpBuilder &builder) {
   Block *block = builder.getBlock();
   if (!block)
@@ -1700,8 +1832,8 @@ Operation *LoadOp::generate(GeneratorOpBuilder &builder) {
                    isa<ConsumeNode>(parent)))
     return nullptr;
 
-  if (builder.config.get<unsigned>("sdfg.scientific") && !isa<MapNode>(parent))
-    return nullptr;
+  if (builder.config.get<unsigned>("sdfg.scientific").value())
+    return generateAffineLoadOp(builder);
 
   llvm::SmallVector<Value> possibleArrays = builder.collectValues(
       [](const Value &v) { return v.getType().isa<ArrayType>(); });
@@ -1919,6 +2051,61 @@ LogicalResult StoreOp::verify() {
   return success();
 }
 
+// Affine StoreOps.
+Operation *generateAffineStoreOp(GeneratorOpBuilder &builder) {
+  // Count maps upper bounds.
+  llvm::DenseMap<unsigned, llvm::SmallVector<Value>> dimNums;
+  Operation *parent = builder.getBlock()->getParentOp();
+  while (isa<MapNode>(parent)) {
+    MapNode parentMap = cast<MapNode>(parent);
+    llvm::APInt dim =
+        parentMap.getUpperBounds()[0].cast<IntegerAttr>().getValue();
+    dimNums[dim.getZExtValue()].push_back(parentMap.getBody().getArgument(0));
+    parent = parentMap->getParentOp();
+  }
+
+  // Sample a fitting array.
+  llvm::Optional<Value> array = builder.sampleValue([&](const Value &v) {
+    if (!v.getType().isa<ArrayType>())
+      return false;
+
+    for (int64_t dim : v.getType().cast<ArrayType>().getIntegers())
+      if (dimNums[dim].empty())
+        return false;
+
+    return true;
+  });
+
+  if (!array.has_value())
+    return nullptr;
+  Value arrayValue = array.value();
+  ArrayType arrayType = arrayValue.getType().cast<ArrayType>();
+
+  // Sample maps.
+  llvm::SmallVector<Value> indices;
+  SmallVector<Attribute> numList;
+  for (int64_t dim : arrayType.getIntegers()) {
+    indices.push_back(builder.sample(dimNums[dim]).value());
+    numList.push_back(builder.getI32IntegerAttr(numList.size()));
+  }
+
+  // Sample value.
+  llvm::Optional<Value> value = builder.sampleValueOfType(
+      arrayType.getElementType(),
+      /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific")
+          .value());
+  // FIXME: Should try each possible array instead.
+  if (!value.has_value())
+    return nullptr;
+
+  // Create StoreOp.
+  OperationState state(builder.getUnknownLoc(), StoreOp::getOperationName());
+  state.addAttribute("indices", builder.getArrayAttr({}));
+  state.addAttribute("indices_numList", builder.getArrayAttr(numList));
+  StoreOp::build(builder, state, indices, value.value(), arrayValue);
+  return builder.create(state);
+}
+
 Operation *StoreOp::generate(GeneratorOpBuilder &builder) {
   Block *block = builder.getBlock();
   if (!block)
@@ -1929,8 +2116,8 @@ Operation *StoreOp::generate(GeneratorOpBuilder &builder) {
                    isa<ConsumeNode>(parent)))
     return nullptr;
 
-  if (builder.config.get<unsigned>("sdfg.scientific") && !isa<MapNode>(parent))
-    return nullptr;
+  if (builder.config.get<unsigned>("sdfg.scientific").value())
+    return generateAffineStoreOp(builder);
 
   llvm::SmallVector<Value> possibleArrays = builder.collectValues(
       [](const Value &v) { return v.getType().isa<ArrayType>(); });
@@ -1960,7 +2147,8 @@ Operation *StoreOp::generate(GeneratorOpBuilder &builder) {
     // Sample value.
     llvm::Optional<Value> value = builder.sampleValueOfType(
         arrayType.getElementType(),
-        /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific"));
+        /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific")
+            .value());
     if (!value.has_value()) {
       llvm::erase_value(possibleArrays, arrayValue);
       continue;

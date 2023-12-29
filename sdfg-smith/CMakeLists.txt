@@ -9,11 +9,10 @@ set(LIBS
     MLIRSmithLib
 )
 
-add_mlir_tool(sdfg-smith sdfg-smith.cpp DEPENDS ${LIBS})
-
-target_link_libraries(sdfg-smith PRIVATE ${LIBS})
+add_llvm_executable(sdfg-smith sdfg-smith.cpp)
 llvm_update_compile_flags(sdfg-smith)
 
+target_link_libraries(sdfg-smith PRIVATE ${LIBS})
 mlir_check_all_link_libraries(sdfg-smith)
 
 target_sources(SOURCE_FILES_CPP PRIVATE sdfg-smith.cpp)
