@@ -163,6 +163,10 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
             .value_or(64);
 
     value = value > limit ? limit : value;
+
+    if (builder.config.get<unsigned>("sdfg.scientific").value())
+      value = builder.sampleUniform<int64_t>(1, limit);
+
     integers.push_back(value);
     shape.push_back(true);
   }
