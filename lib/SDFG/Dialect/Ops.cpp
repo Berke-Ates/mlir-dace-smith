@@ -393,6 +393,18 @@ Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
       return nullptr;
   }
 
+  // Ensure maps are present in scientific mode.
+  for (int i = 0;
+       builder.config.get<unsigned>("sdfg.scientific").value() &&
+       entryStateOp->getRegion(0).getOps<MapNode>().empty() && i < 100;
+       ++i) {
+    entryStateOp->erase();
+    builder.setInsertionPointToEnd(&sdfgNode.getBody().back());
+    entryStateOp = StateNode::generate(builder);
+    while (!entryStateOp)
+      entryStateOp = StateNode::generate(builder);
+  }
+
   StateNode entryState = cast<StateNode>(entryStateOp);
   sdfgNode.setEntry(entryState.getName());
 
@@ -1168,7 +1180,7 @@ Operation *generateAffineMapNode(GeneratorOpBuilder &builder) {
   Block *body =
       builder.createBlock(&mapNode.getBody(), {}, {builder.getIndexType()},
                           builder.getUnknownLocs(1));
-  if (builder.generateBlock(body).failed() /*|| body->empty()*/) {
+  if (builder.generateBlock(body).failed() || body->empty()) {
     mapNode.erase();
     return nullptr;
   }
