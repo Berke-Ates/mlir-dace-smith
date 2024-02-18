@@ -155,6 +155,25 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
   if (builder.config.get<unsigned>("sdfg.scientific").value())
     length = builder.sampleUniform<unsigned>(2, 3);
 
+  // Get all dimensions and types of previous arrays
+  llvm::SmallVector<Value> prevArrays = builder.collectValues(
+      [](const Value &v) { return v.getType().isa<ArrayType>(); });
+
+  llvm::SmallVector<int64_t> prevDimensions;
+  llvm::SmallVector<Type> prevTypes;
+  for (const Value &v : prevArrays) {
+    ArrayType arrayType = v.getType().cast<ArrayType>();
+    for (int64_t dim : arrayType.getIntegers())
+      prevDimensions.push_back(dim);
+    prevTypes.push_back(arrayType.getElementType());
+  }
+
+  // In scientific mode reuse previous types 75% of the time
+  if (builder.config.get<unsigned>("sdfg.scientific").value() &&
+      builder.sampleUniform(0, 100) < 75)
+    elemType = builder.sample(prevTypes).value_or(elemType);
+
+  // Generate dimensions
   for (unsigned i = 0; i < length; ++i) {
     int64_t value = builder.sampleGeometric<int64_t>() + 1;
     unsigned limit =
@@ -164,8 +183,12 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
 
     value = value > limit ? limit : value;
 
-    if (builder.config.get<unsigned>("sdfg.scientific").value())
+    if (builder.config.get<unsigned>("sdfg.scientific").value()) {
       value = builder.sampleUniform<int64_t>(1, limit);
+
+      if (builder.sampleUniform(0, 100) < 75)
+        value = builder.sample(prevDimensions).value_or(value);
+    }
 
     integers.push_back(value);
     shape.push_back(true);

@@ -124,6 +124,22 @@ static void printAsArgs(OpAsmPrinter &p, OperandRange opRange,
   p << ")";
 }
 
+// Returns true if the provided operation has a nested operation of the provided
+// type.
+template <typename OpType>
+bool hasNestedOp(Operation *op) {
+  if (isa<OpType>(op))
+    return true;
+
+  for (auto &region : op->getRegions())
+    for (auto &block : region)
+      for (auto &nestedOp : block)
+        if (hasNestedOp<OpType>(&nestedOp))
+          return true;
+
+  return false;
+}
+
 //===----------------------------------------------------------------------===//
 // InlineSymbol
 //===----------------------------------------------------------------------===//
@@ -393,10 +409,11 @@ Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
       return nullptr;
   }
 
-  // Ensure maps are present in scientific mode.
-  for (int i = 0;
-       builder.config.get<unsigned>("sdfg.scientific").value() &&
-       entryStateOp->getRegion(0).getOps<MapNode>().empty() && i < 100;
+  // Ensure maps and stores are present in scientific mode.
+  for (int i = 0; builder.config.get<unsigned>("sdfg.scientific").value() &&
+                  (!hasNestedOp<MapNode>(entryStateOp) ||
+                   !hasNestedOp<StoreOp>(entryStateOp)) &&
+                  i < 100;
        ++i) {
     entryStateOp->erase();
     builder.setInsertionPointToEnd(&sdfgNode.getBody().back());
@@ -421,15 +438,26 @@ Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
   llvm::SmallVector<Value> values = builder.collectValues(
       [](const Value &v) { return v.getType().isa<ArrayType>(); });
 
+  llvm::SmallVector<Value> arguments = {};
+
+  if (builder.config.get<unsigned>("sdfg.scientific").value())
+    for (Value alloc : values)
+      arguments.push_back(alloc);
+
   unsigned numArgs = builder.sampleGeometric<unsigned>();
   numArgs = numArgs > values.size() ? values.size() : numArgs;
   llvm::Optional<llvm::SmallVector<Value>> argVals =
       builder.sample(values, numArgs, /*allowDuplucates=*/false);
 
-  if (!argVals.has_value())
+  if (argVals.has_value())
+    for (Value v : argVals.value())
+      if (!llvm::is_contained(arguments, v))
+        arguments.push_back(v);
+
+  if (arguments.empty())
     return sdfgNode;
 
-  for (Value v : argVals.value()) {
+  for (Value v : arguments) {
     BlockArgument bArg =
         body->addArgument(v.getType(), builder.getUnknownLoc());
     v.replaceAllUsesWith(bArg);
