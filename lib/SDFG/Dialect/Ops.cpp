@@ -990,11 +990,23 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
   while (!possibleOps.empty()) {
     llvm::Optional<RegisteredOperationName> sampledOp =
         builder.sample(possibleOps);
-    if (sampledOp.has_value() && builder.generate(sampledOp.value()))
+
+    if (!sampledOp.has_value())
       break;
 
-    if (sampledOp.has_value())
-      llvm::erase_value(possibleOps, sampledOp.value());
+    Operation *genOp = builder.generate(sampledOp.value());
+    if (genOp && !builder.config.get<unsigned>("sdfg.scientific").value())
+      break;
+
+    // In scientific mode, we avoid f16
+    if (genOp && builder.config.get<unsigned>("sdfg.scientific").value() &&
+        !llvm::is_contained(genOp->getResultTypes(), builder.getF16Type()))
+      break;
+
+    if (genOp)
+      genOp->erase();
+
+    llvm::erase_value(possibleOps, sampledOp.value());
   }
   //-----
 
