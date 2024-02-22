@@ -1116,7 +1116,6 @@ void MapEntryImpl::routeOut(Connector from, Connector to, Value mapValue) {
   MapExit mapExit = getExit();
   Connector in(mapExit, "IN_" + utils::valueToString(mapValue));
   in.setData(from.data);
-  in.setRanges(from.ranges);
   mapExit.addInConnector(in);
   addEdge(MultiEdge(location, from, in));
 
@@ -1177,7 +1176,6 @@ Connector MapEntryImpl::lookup(Value value) {
     MapEntry mapEntry(shared_from_this());
     Connector dstConn(mapEntry, "IN_" + utils::valueToString(value));
     dstConn.setData(srcConn.data);
-    dstConn.setRanges(srcConn.ranges);
     addInConnector(dstConn);
 
     MultiEdge multiedge(location, srcConn, dstConn);
