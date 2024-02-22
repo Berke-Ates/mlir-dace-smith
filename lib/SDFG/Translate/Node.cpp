@@ -1120,8 +1120,8 @@ void MapEntryImpl::routeOut(Connector from, Connector to, Value mapValue) {
   addEdge(MultiEdge(location, from, in));
 
   Connector out(mapExit, "OUT_" + utils::valueToString(mapValue));
-  out.setData(in.data);
-  out.setRanges(in.ranges);
+  out.setData(from.data);
+  out.setRanges(from.ranges);
   mapExit.addOutConnector(out);
 
   ScopeNode scope(parent);
@@ -1182,8 +1182,8 @@ Connector MapEntryImpl::lookup(Value value) {
     scope.addEdge(multiedge);
 
     Connector outConn(mapEntry, "OUT_" + utils::valueToString(value));
-    outConn.setData(dstConn.data);
-    outConn.setRanges(dstConn.ranges);
+    outConn.setData(srcConn.data);
+    outConn.setRanges(srcConn.ranges);
     addOutConnector(outConn);
     mapConnector(value, outConn);
   }
