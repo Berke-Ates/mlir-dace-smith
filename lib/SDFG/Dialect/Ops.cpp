@@ -1184,7 +1184,7 @@ Operation *generateAffineMapNode(GeneratorOpBuilder &builder) {
   while (isa<MapNode>(parent)) {
     MapNode parentMap = cast<MapNode>(parent);
     llvm::APInt dim =
-        parentMap.getUpperBounds()[0].cast<IntegerAttr>().getValue();
+        parentMap.getUpperBounds()[0].cast<IntegerAttr>().getValue() + 1;
     if (--dimNums[dim.getZExtValue()] <= 0)
       dimNums.erase(dim.getZExtValue());
     parent = parentMap->getParentOp();
@@ -1210,7 +1210,7 @@ Operation *generateAffineMapNode(GeneratorOpBuilder &builder) {
   MapNode::build(builder, state, sdfg::utils::generateID(),
                  sdfg::utils::generateID(), {},
                  builder.getArrayAttr({builder.getIndexAttr(0)}),
-                 builder.getArrayAttr({builder.getIndexAttr(dim)}),
+                 builder.getArrayAttr({builder.getIndexAttr(dim - 1)}),
                  builder.getArrayAttr({builder.getIndexAttr(1)}));
   Operation *op = builder.create(state);
   if (!op)
