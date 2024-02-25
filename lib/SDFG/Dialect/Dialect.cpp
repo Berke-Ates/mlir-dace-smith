@@ -170,7 +170,7 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
 
   // In scientific mode reuse previous types 75% of the time
   if (builder.config.get<unsigned>("sdfg.scientific").value() &&
-      builder.sampleUniform(0, 100) < 75)
+      builder.sampleUniform(0, 100) < 80)
     elemType = builder.sample(prevTypes).value_or(elemType);
 
   // Generate dimensions
@@ -186,7 +186,7 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
     if (builder.config.get<unsigned>("sdfg.scientific").value()) {
       value = builder.sampleUniform<int64_t>(1, limit);
 
-      if (builder.sampleUniform(0, 100) < 75)
+      if (builder.sampleUniform(0, 100) < 80)
         value = builder.sample(prevDimensions).value_or(value);
     }
 

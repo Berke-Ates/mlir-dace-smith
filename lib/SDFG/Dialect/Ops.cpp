@@ -391,6 +391,9 @@ Operation *SDFGNode::generate(GeneratorOpBuilder &builder) {
 
   // Generate global allocations.
   unsigned length = builder.sampleGeometric<unsigned>() + 1;
+  if (!!builder.config.get<unsigned>("sdfg.scientific").value())
+    length = builder.sampleUniform<unsigned>(3, 8);
+
   llvm::SmallVector<Operation *> allocations;
   for (unsigned i = 0; i < length; ++i) {
     Operation *op = AllocOp::generate(builder);
