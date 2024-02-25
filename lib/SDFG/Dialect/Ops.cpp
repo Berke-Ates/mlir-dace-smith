@@ -1012,7 +1012,10 @@ Operation *TaskletNode::generate(GeneratorOpBuilder &builder) {
 
   llvm::SmallVector<Type> resultTypes = builder.sampleTypes();
   llvm::Optional<llvm::SmallVector<Value>> results =
-      builder.sampleValuesOfTypes(resultTypes);
+      builder.sampleValuesOfTypes(
+          resultTypes,
+          /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific")
+              .value());
   if (!results.has_value()) {
     taskletNode.erase();
     return nullptr;
@@ -1841,16 +1844,19 @@ Operation *generateAffineLoadOp(GeneratorOpBuilder &builder) {
   }
 
   // Sample a fitting array.
-  llvm::Optional<Value> array = builder.sampleValue([&](const Value &v) {
-    if (!v.getType().isa<ArrayType>())
-      return false;
+  llvm::Optional<Value> array = builder.sampleValue(
+      [&](const Value &v) {
+        if (!v.getType().isa<ArrayType>())
+          return false;
 
-    for (int64_t dim : v.getType().cast<ArrayType>().getIntegers())
-      if (dimNums[dim].empty())
-        return false;
+        for (int64_t dim : v.getType().cast<ArrayType>().getIntegers())
+          if (dimNums[dim].empty())
+            return false;
 
-    return true;
-  });
+        return true;
+      },
+      /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific")
+          .value());
 
   if (!array.has_value())
     return nullptr;
@@ -2117,16 +2123,19 @@ Operation *generateAffineStoreOp(GeneratorOpBuilder &builder) {
   }
 
   // Sample a fitting array.
-  llvm::Optional<Value> array = builder.sampleValue([&](const Value &v) {
-    if (!v.getType().isa<ArrayType>())
-      return false;
+  llvm::Optional<Value> array = builder.sampleValue(
+      [&](const Value &v) {
+        if (!v.getType().isa<ArrayType>())
+          return false;
 
-    for (int64_t dim : v.getType().cast<ArrayType>().getIntegers())
-      if (dimNums[dim].empty())
-        return false;
+        for (int64_t dim : v.getType().cast<ArrayType>().getIntegers())
+          if (dimNums[dim].empty())
+            return false;
 
-    return true;
-  });
+        return true;
+      },
+      /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific")
+          .value());
 
   if (!array.has_value())
     return nullptr;
@@ -2305,33 +2314,45 @@ Operation *CopyOp::generate(GeneratorOpBuilder &builder) {
                    isa<ConsumeNode>(parent)))
     return nullptr;
 
+  llvm::SmallVector<Value> unusedArrays =
+      builder.collectValues([](const Value &v) {
+        return v.getType().isa<ArrayType>() && v.getUses().empty();
+      });
+
   llvm::SmallVector<Value> possibleArrays = builder.collectValues(
       [](const Value &v) { return v.getType().isa<ArrayType>(); });
 
   while (!possibleArrays.empty()) {
-    Value srcArr = builder.sample(possibleArrays).value();
+    llvm::SmallVector<Value> *pool = &possibleArrays;
+    if (!unusedArrays.empty() &&
+        !!builder.config.get<unsigned>("sdfg.scientific").value())
+      pool = &unusedArrays;
+    Value srcArr = builder.sample(*pool).value();
     ArrayType arrayType = srcArr.getType().cast<ArrayType>();
 
     // TODO: Handle dynamic sizes
     if (arrayType.getDimensions().getUndefRank() > 0) {
-      llvm::erase_value(possibleArrays, srcArr);
+      llvm::erase_value(*pool, srcArr);
       continue;
     }
 
     // TODO: Handle symbolic sizes
     if (arrayType.getSymbols().size() > 0) {
-      llvm::erase_value(possibleArrays, srcArr);
+      llvm::erase_value(*pool, srcArr);
       continue;
     }
 
     // TODO: Handle block arguments
     if (!srcArr.getDefiningOp()) {
-      llvm::erase_value(possibleArrays, srcArr);
+      llvm::erase_value(*pool, srcArr);
       continue;
     }
 
     // Sample destArray
-    llvm::Optional<Value> destArr = builder.sampleValueOfType(arrayType);
+    llvm::Optional<Value> destArr = builder.sampleValueOfType(
+        arrayType,
+        /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific")
+            .value());
 
     // Create CopyOp.
     OperationState state(builder.getUnknownLoc(), CopyOp::getOperationName());
@@ -2340,7 +2361,7 @@ Operation *CopyOp::generate(GeneratorOpBuilder &builder) {
     if (op)
       return op;
 
-    llvm::erase_value(possibleArrays, srcArr);
+    llvm::erase_value(*pool, srcArr);
   }
 
   return nullptr;
