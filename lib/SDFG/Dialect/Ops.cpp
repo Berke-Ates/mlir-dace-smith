@@ -2313,8 +2313,10 @@ Operation *CopyOp::generate(GeneratorOpBuilder &builder) {
     return nullptr;
 
   Operation *parent = block->getParentOp();
-  if (!parent || !(isa<StateNode>(parent) || isa<MapNode>(parent) ||
-                   isa<ConsumeNode>(parent)))
+  // Although MapNodes and ConsumeNodes are valid parents, it's not sensible to
+  // generate a CopyOp inside them.
+  if (!parent || !(isa<StateNode>(parent) /*|| isa<MapNode>(parent) ||
+                   isa<ConsumeNode>(parent)*/))
     return nullptr;
 
   llvm::SmallVector<Value> unusedArrays =
@@ -2352,10 +2354,15 @@ Operation *CopyOp::generate(GeneratorOpBuilder &builder) {
     }
 
     // Sample destArray
-    llvm::Optional<Value> destArr = builder.sampleValueOfType(
-        arrayType,
+    llvm::Optional<Value> destArr = builder.sampleValue(
+        [&](const Value &v) { return v.getType() == arrayType && v != srcArr; },
         /*unusedFirst=*/!!builder.config.get<unsigned>("sdfg.scientific")
             .value());
+
+    if (!destArr.has_value()) {
+      llvm::erase_value(*pool, srcArr);
+      continue;
+    }
 
     // Create CopyOp.
     OperationState state(builder.getUnknownLoc(), CopyOp::getOperationName());
