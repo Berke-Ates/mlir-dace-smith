@@ -168,7 +168,7 @@ Type ArrayType::generate(GeneratorOpBuilder &builder) {
     prevTypes.push_back(arrayType.getElementType());
   }
 
-  // In scientific mode reuse previous types 75% of the time
+  // In scientific mode reuse previous types 80% of the time
   if (builder.config.get<unsigned>("sdfg.scientific").value() &&
       builder.sampleUniform(0, 100) < 80)
     elemType = builder.sample(prevTypes).value_or(elemType);
